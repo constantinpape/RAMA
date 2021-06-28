@@ -3,7 +3,7 @@
 #include <thrust/reduce.h>
 #include <stdio.h>
 #include "time_measure_util.h"
-
+#include<set>
 static const float tol = 1e-3;
 
 // https://stackoverflow.com/questions/62091548/atomiccas-for-bool-implementation
@@ -159,11 +159,12 @@ __global__ void reparameterize(int num_edges, int cycle_length, const int* const
                 float message = -e_values[seed_edge];
                 assert(message >= 0);
                 int next_edge = v_parent_edge[to_vertex];
+                assert(next_edge >= 0);
                 for (int e = 0; e != cycle_length - 1; ++e)
                 {
                     //DEBUG:
                     // assert(v_seed_edge[to_vertex] == seed_edge);
-                    if (v_seed_edge[to_vertex] != seed_edge || e_values[next_edge] <= 0)
+                    if (v_seed_edge[to_vertex] != seed_edge || e_values[next_edge] <= 0 || next_edge == seed_edge)
                     {
                         invalid = true;
                         e_used[seed_edge] = false;
@@ -175,6 +176,7 @@ __global__ void reparameterize(int num_edges, int cycle_length, const int* const
                     message = min(e_values[next_edge], message);
                     to_vertex = e_col_ids[next_edge] == to_vertex ? e_row_ids[next_edge] : e_col_ids[next_edge];
                     next_edge = v_parent_edge[to_vertex];
+                    assert(next_edge >= 0);
                 }
                 if (invalid || to_vertex != from_vertex)
                     continue;
@@ -205,6 +207,75 @@ __global__ void reparameterize(int num_edges, int cycle_length, const int* const
     }
 }
 
+std::set<int> find_cycle_edges(const int cycle_length, const int seed_edge, 
+                            const std::vector<int>& row_ids, const std::vector<int>& col_ids, 
+                            const std::vector<int>& v_parent_edge, const std::vector<int>& v_seed_edge)
+{
+    std::set<int> positive_edges;
+    int start_vertex = row_ids[seed_edge];
+    int end_vertex = col_ids[seed_edge];
+    if (v_parent_edge[end_vertex] == seed_edge)
+    {
+        int temp = start_vertex;
+        start_vertex = end_vertex;
+        end_vertex = temp;
+    }
+    if (v_seed_edge[end_vertex] != seed_edge || v_parent_edge[start_vertex] != seed_edge)
+        return positive_edges;
+
+    for (int i = 0; i < cycle_length - 1; i++)
+    {
+        int next_edge = v_parent_edge[end_vertex];
+        assert(next_edge != seed_edge);
+        assert(positive_edges.find(next_edge) == positive_edges.end());
+        positive_edges.insert(next_edge);
+        end_vertex = col_ids[next_edge] == end_vertex ? row_ids[next_edge] : col_ids[next_edge];
+    }
+    assert(end_vertex == start_vertex);
+    return positive_edges;
+}
+
+void check_detected_cycles(int cycle_length, const thrust::device_vector<int>& row_ids, const thrust::device_vector<int>& col_ids, const thrust::device_vector<float>& costs,
+    const thrust::device_vector<float>& costs_reparam, const thrust::device_vector<int>& v_parent_edge, const thrust::device_vector<int>& v_dist, 
+    const thrust::device_vector<bool>& e_used, const thrust::device_vector<bool>& prev_e_used, 
+    const thrust::device_vector<int>& v_seed_edge, const thrust::device_vector<bool>& e_valid_seeds)
+{
+    std::vector<int> row_ids_h(row_ids.size());
+    thrust::copy(row_ids.begin(), row_ids.end(), row_ids_h.begin());
+    std::vector<int> col_ids_h(col_ids.size());
+    thrust::copy(col_ids.begin(), col_ids.end(), col_ids_h.begin());
+    std::vector<int> costs_h(costs.size());
+    thrust::copy(costs.begin(), costs.end(), costs_h.begin());
+    std::vector<int> costs_reparam_h(costs_reparam.size());
+    thrust::copy(costs_reparam.begin(), costs_reparam.end(), costs_reparam_h.begin());
+    std::vector<int> v_parent_edge_h(v_parent_edge.size());
+    thrust::copy(v_parent_edge.begin(), v_parent_edge.end(), v_parent_edge_h.begin());
+    std::vector<int> v_seed_edge_h(v_seed_edge.size());
+    thrust::copy(v_seed_edge.begin(), v_seed_edge.end(), v_seed_edge_h.begin());
+    std::vector<int> v_dist_h(v_dist.size());
+    thrust::copy(v_dist.begin(), v_dist.end(), v_dist_h.begin());
+    std::vector<bool> e_used_h(e_used.size());
+    thrust::copy(e_used.begin(), e_used.end(), e_used_h.begin());
+    std::vector<bool> prev_e_used_h(prev_e_used.size());
+    thrust::copy(prev_e_used.begin(), prev_e_used.end(), prev_e_used_h.begin());
+    std::vector<bool> e_valid_seeds_h(e_valid_seeds.size());
+    thrust::copy(e_valid_seeds.begin(), e_valid_seeds.end(), e_valid_seeds_h.begin());
+    std::vector<int> e_count(e_used_h.size(), 0);
+
+    for (int e = 0; e < e_used_h.size(); e++)
+    {
+        if (prev_e_used_h[e] || costs_h[e] >= 0 || !e_used_h[e] || !e_valid_seeds_h[e])
+            continue;
+        
+        std::set<int> pos_edges = find_cycle_edges(cycle_length, e, row_ids_h, col_ids_h, v_parent_edge_h, v_seed_edge_h);
+        for (auto p: pos_edges)
+        {
+            assert(e_count[p] == 0);
+            e_count[p]++;
+        }
+    }
+}
+
 // row_ids, col_ids, values should be directed thus containing same number of elements as in original problem.
 std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::device_vector<float>> parallel_cycle_packing_cuda(
     const thrust::device_vector<int>& row_ids, const thrust::device_vector<int>& col_ids, const thrust::device_vector<float>& costs,
@@ -223,7 +294,10 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::devic
     thrust::device_vector<bool> e_used(num_edges, false);
     thrust::device_vector<bool> still_running(1, false);
     thrust::device_vector<int> num_cycles_packed(1, 0);
-    
+
+    //DEBUG: 
+    // thrust::device_vector<bool> prev_e_used(num_edges, false);
+
     int threadCount = 256;
     int blockCount = ceil(num_edges / (float) threadCount);
     int l = 3;
@@ -237,9 +311,6 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::devic
         thrust::fill(thrust::device, e_valid_seeds.begin(), e_valid_seeds.end(), false);
         thrust::fill(thrust::device, still_running.begin(), still_running.end(), false);
 
-        // thrust::copy(costs_reparam.begin(), costs_reparam.end(), std::ostream_iterator<float>(std::cout, " "));
-        // std::cout<<"\n";
-                                    
         initialize<<<blockCount, threadCount>>>(num_edges, 
                                             thrust::raw_pointer_cast(row_ids.data()), 
                                             thrust::raw_pointer_cast(col_ids.data()), 
@@ -288,6 +359,11 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>, thrust::devic
         thrust::transform(e_used.begin(), e_used.end(), e_valid_seeds.begin(), e_used.begin(), thrust::maximum<bool>());
         std::cout<<"cycle length: "<<l<<", cumulative # used -ive edges: "<<thrust::reduce(e_used.begin(), e_used.end(), 0)<<" cumulative # cycles packed: "<<num_cycles_packed[0]<<std::endl;
 
+        // thrust::copy(costs_reparam.begin(), costs_reparam.end(), std::ostream_iterator<float>(std::cout, " "));
+        // std::cout<<"\n";
+
+        // check_detected_cycles(l, row_ids, col_ids, costs, costs_reparam, v_parent_edge, v_dist, e_used, prev_e_used, v_seed_edge, e_valid_seeds);
+        // prev_e_used = e_used;
     }
 
     return {row_ids, col_ids, costs_reparam};

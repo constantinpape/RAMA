@@ -154,6 +154,43 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> edges_to_cont
     return {col_ids, row_ids};
 }
 
+std::tuple<dCSR,thrust::device_vector<int>> edge_contraction_matrix_cuda_complete(cusparseHandle_t handle, dCSR& A, const size_t max_contractions)
+{
+    MEASURE_FUNCTION_EXECUTION_TIME;
+
+    dCSR A_contraction = A.keep_top_k_positive_values(handle, 2 * max_contractions); // A contains each edge twice.
+    
+    if (A_contraction.nnz() == 0)
+    {
+        dCSR C;
+        return {C, thrust::device_vector<int>(0)};
+    }   
+    const int n = A_contraction.rows();
+    thrust::device_vector<int> cc_labels(n);
+
+    computeCC_gpu(n, A_contraction.nnz(), 
+            thrust::raw_pointer_cast(A_contraction.get_row_offsets().data()), 
+            thrust::raw_pointer_cast(A_contraction.get_col_ids().data()), 
+            thrust::raw_pointer_cast(cc_labels.data()), get_cuda_device());
+
+    thrust::device_vector<int> node_mapping = compress_label_sequence(cc_labels);
+    const int nr_ccs = *thrust::max_element(node_mapping.begin(), node_mapping.end()) + 1;
+
+    assert(nr_ccs < n);
+
+    // construct contraction matrix
+    thrust::device_vector<int> c_row_ids(n);
+    thrust::sequence(c_row_ids.begin(), c_row_ids.end());
+    thrust::device_vector<int> c_col_ids = node_mapping;
+
+    assert(nr_ccs > *thrust::max_element(c_col_ids.begin(), c_col_ids.end()));
+    assert(n > *thrust::max_element(c_row_ids.begin(), c_row_ids.end()));
+
+    thrust::device_vector<int> ones(c_row_ids.size(), 1);
+    dCSR C(handle, n, nr_ccs, c_col_ids.begin(), c_col_ids.end(), c_row_ids.begin(), c_row_ids.end(), ones.begin(), ones.end());
+    return {C, node_mapping};
+}
+
 std::vector<int> parallel_gaec_cuda(dCSR& A)
 {
     MEASURE_FUNCTION_EXECUTION_TIME;
@@ -183,6 +220,14 @@ std::vector<int> parallel_gaec_cuda(dCSR& A)
         }
         dCSR C;
         thrust::device_vector<int> cur_node_mapping;
+
+        // std::tie(C, cur_node_mapping) = edge_contraction_matrix_cuda_complete(handle, A, nr_edges_to_contract);
+        // if (cur_node_mapping.size() == 0)
+        // {
+        //     std::cout << "# iterations = " << iter << "\n";
+        //     break;
+        // }
+
         std::tie(C, cur_node_mapping) = edge_contraction_matrix_cuda(handle, contract_cols, contract_rows, A.rows());
 
         thrust::gather(node_mapping.begin(), node_mapping.end(), cur_node_mapping.begin(), node_mapping.begin());
@@ -227,6 +272,17 @@ void print_obj_original(const std::vector<int>& h_node_mapping, const std::vecto
     std::cout<<"Cost w.r.t original objective: "<<obj<<std::endl;
 }
 
+struct combine_costs
+{
+    const float a;
+    combine_costs(float _a) : a(_a) {}
+
+    __host__ __device__
+        float operator()(const float& orig, const float& reparam) const { 
+            return a * orig + (1.0f - a) * reparam;
+        }
+};
+
 std::vector<int> parallel_gaec_cuda(const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& costs)
 {
     const int cuda_device = get_cuda_device();
@@ -243,9 +299,11 @@ std::vector<int> parallel_gaec_cuda(const std::vector<int>& i, const std::vector
 
     thrust::device_vector<int> i_d_reparam;
     thrust::device_vector<int> j_d_reparam;
-    thrust::device_vector<int> costs_d_reparam;
-    std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_cycle_packing_cuda(i_d, j_d, costs_d, 7);
+    thrust::device_vector<float> costs_d_reparam;
+    std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_cycle_packing_cuda(i_d, j_d, costs_d, 10, 10);
 
+    // costs_d_reparam = lambda * costs_d + (1 - lambda) * costs_d_reparam
+    // thrust::transform(costs_d.begin(), costs_d.end(), costs_d_reparam.begin(), costs_d_reparam.begin(), combine_costs(0.5));
     //TODO: 
     // 1. How to use the costs?
     // 2. Should zero edges be removed?
