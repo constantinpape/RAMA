@@ -342,7 +342,7 @@ std::vector<int> parallel_gaec_cuda(const std::vector<int>& i, const std::vector
     thrust::device_vector<float> costs_d_reparam;
 
     // std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_cycle_packing_cuda(i_d, j_d, costs_d, 5, 1000);
-    std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_small_cycle_packing_cuda(handle, i_d, j_d, costs_d, 1);
+    std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_small_cycle_packing_cuda(handle, i_d, j_d, costs_d, 0);
 
     // To combine costs:
     // thrust::transform(costs_d.begin(), costs_d.end(), costs_d_reparam.begin(), costs_d_reparam.begin(), combine_costs(0.5));

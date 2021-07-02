@@ -10,21 +10,25 @@
 #include <thrust/generate.h>
 #include <cusparse.h>
 #include "time_measure_util.h"
+#include <dCSR_sp.h>
+#include <sstream>   
 
 namespace {
 
 void checkCuSparseError(cusparseStatus_t status, std::string errorMsg)
 {
     if (status != CUSPARSE_STATUS_SUCCESS) {
-        std::cout << "CuSparse error: " << errorMsg << ", status: "<< cusparseGetErrorString(status) << std::endl;
-        throw std::exception();
+        std::stringstream error;
+        error << "CuSparse error: " << errorMsg << ", status: "<< cusparseGetErrorString(status) << std::endl;
+        throw std::runtime_error(error.str());
     }
 }
 void checkCudaError(cudaError_t status, std::string errorMsg)
 {
     if (status != cudaSuccess) {
-        std::cout << "CUDA error: " << errorMsg << ", status" <<cudaGetErrorString(status) << std::endl;
-        throw std::exception();
+        std::stringstream error;
+        error << "CUDA error: " << errorMsg << ", status" <<cudaGetErrorString(status) << std::endl;
+        throw std::runtime_error(error.str());
     }
 }
 }
@@ -57,6 +61,7 @@ class dCSR {
 
         friend dCSR multiply(cusparseHandle_t handle, dCSR& A, dCSR& B);
         friend dCSR multiply_slow(cusparseHandle_t handle, dCSR& A, dCSR& B);
+        friend dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B);
         friend thrust::device_vector<float> multiply(cusparseHandle_t handle, const dCSR& A, const thrust::device_vector<float>& x);
 
         std::tuple<thrust::device_vector<int>, const thrust::device_vector<int>&, const thrust::device_vector<float>&> export_coo(cusparseHandle_t handle) const;
@@ -77,6 +82,7 @@ class dCSR {
         const thrust::device_vector<float> get_data() const { return data; }
 
         thrust::device_vector<float> diagonal(cusparseHandle_t) const;
+        spECKWrapper::dCSR<float> get_spECK_matrix(thrust::device_vector<unsigned int>& row_offsets_u, thrust::device_vector<unsigned int>& col_ids_u);
 
     private:
         template<typename COL_ITERATOR, typename ROW_ITERATOR, typename DATA_ITERATOR>
@@ -201,8 +207,7 @@ void dCSR::init(cusparseHandle_t handle,
     row_offsets = compute_row_offsets(handle, rows(), col_ids, row_ids);
 }
 
-
-
 dCSR multiply(cusparseHandle_t handle, const dCSR& A, const dCSR& B);
+dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B);
 dCSR multiply_slow(cusparseHandle_t handle, const dCSR& A, const dCSR& B);
 thrust::device_vector<float> multiply(cusparseHandle_t handle, const dCSR& A, const thrust::device_vector<float>& x);
