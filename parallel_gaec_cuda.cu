@@ -219,6 +219,17 @@ dCSR contract(cusparseHandle_t handle, dCSR& A, dCSR& C)
     return new_A;
 }
 
+dCSR contract_spECK(cusparseHandle_t handle, dCSR& A, dCSR& C)
+{
+    MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+    assert(A.cols() == A.rows());
+    dCSR intermed = multiply_spECK(handle, A, C);
+    dCSR C_trans = C.transpose(handle);
+    dCSR new_A = multiply_spECK(handle, C_trans, intermed);
+    assert(new_A.rows() == new_A.cols());
+    return new_A;
+}
+
 std::vector<int> parallel_gaec_cuda(dCSR& A)
 {
     MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
@@ -252,6 +263,8 @@ std::vector<int> parallel_gaec_cuda(dCSR& A)
         std::tie(C, cur_node_mapping) = edge_contraction_matrix_cuda(handle, contract_cols, contract_rows, A.rows());
 
         dCSR new_A = contract(handle, A, C);
+        dCSR new_A_spECK = contract_spECK(handle, A, C);
+        new_A.compare(new_A_spECK);
         std::cout << "contract C size " << C.cols() << "x" << C.rows() << "\n";
         std::cout << "original A size " << A.cols() << "x" << A.rows() << "\n";
         std::cout << "contracted A size " << new_A.cols() << "x" << new_A.rows() << "\n";
@@ -261,7 +274,7 @@ std::vector<int> parallel_gaec_cuda(dCSR& A)
         const float energy_reduction = thrust::reduce(diagonal.begin(), diagonal.end());
         std::cout << "energy reduction " << energy_reduction << "\n";
         //if(energy_reduction < 0.0)
-        if(has_bad_contractions(handle, new_A))
+        if(has_bad_contractions(handle, new_A) && false)
         {
             contract_ratio *= 2.0; 
             //contract_ratio = std::max(contract_ratio, 0.005);
@@ -342,7 +355,7 @@ std::vector<int> parallel_gaec_cuda(const std::vector<int>& i, const std::vector
     thrust::device_vector<float> costs_d_reparam;
 
     // std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_cycle_packing_cuda(i_d, j_d, costs_d, 5, 1000);
-    std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_small_cycle_packing_cuda(handle, i_d, j_d, costs_d, 0);
+    std::tie(i_d_reparam, j_d_reparam, costs_d_reparam) = parallel_small_cycle_packing_cuda(handle, i_d, j_d, costs_d, 1);
 
     // To combine costs:
     // thrust::transform(costs_d.begin(), costs_d.end(), costs_d_reparam.begin(), costs_d_reparam.begin(), combine_costs(0.5));

@@ -70,6 +70,7 @@ class dCSR {
         void set_diagonal_to_zero(cusparseHandle_t handle);
         float sum();
         void print() const;
+        void compare(const dCSR& mat) const;
         void print_info_of(const int i) const;
 
         static thrust::device_vector<int> compute_row_offsets(cusparseHandle_t handle, const int rows, const thrust::device_vector<int>& col_ids, const thrust::device_vector<int>& row_ids);
@@ -82,9 +83,8 @@ class dCSR {
         const thrust::device_vector<float> get_data() const { return data; }
 
         thrust::device_vector<float> diagonal(cusparseHandle_t) const;
-        spECKWrapper::dCSR<float> get_spECK_matrix(thrust::device_vector<unsigned int>& row_offsets_u, thrust::device_vector<unsigned int>& col_ids_u);
+        std::tuple<thrust::device_vector<unsigned int>, thrust::device_vector<unsigned int>> get_spECK_ids();
 
-    private:
         template<typename COL_ITERATOR, typename ROW_ITERATOR, typename DATA_ITERATOR>
             void init(cusparseHandle_t handle,
                     COL_ITERATOR col_id_begin, COL_ITERATOR col_id_end,

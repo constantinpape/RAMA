@@ -19,6 +19,37 @@ void dCSR::print() const
             std::cout << i << ", " << col_ids[l] << ", " << data[l] << "\n"; 
 }
 
+void dCSR::compare(const dCSR& mat) const
+{
+    float tol = 1.0;
+    assert(rows() == mat.rows());
+    assert(cols() == mat.cols());
+    assert(nnz() == mat.nnz());
+    thrust::host_vector<int> row_offsets_h = row_offsets;
+    thrust::host_vector<int> mat_row_offsets_h = mat.row_offsets;
+    thrust::host_vector<int> col_ids_h = col_ids;
+    thrust::host_vector<int> mat_col_ids_h = mat.col_ids;
+    thrust::host_vector<int> data_h = data;
+    thrust::host_vector<int> mat_data_h = mat.data;
+    for(size_t i=0; i<rows(); ++i)
+    {
+        assert(row_offsets_h[i] == mat_row_offsets_h[i]);
+        assert(row_offsets_h[i + 1] == mat_row_offsets_h[i + 1]);
+
+        for(size_t l=row_offsets_h[i]; l<row_offsets_h[i+1]; ++l)
+        {
+            assert(col_ids_h[l] == mat_col_ids_h[l]);
+            
+            assert(std::abs(data_h[l] / mat_data_h[l] - 1) > 0.01);
+            // if(std::abs(data_h[l] - mat_data_h[l]) > tol)
+            // {
+            //     std::cout<<"data_h[l]: "<<data_h[l]<<", mat_data_h[l]"<<mat_data_h[l]<<std::endl;
+            //     assert(false);
+            // }
+        }
+    }
+}
+
 dCSR dCSR::transpose(cusparseHandle_t handle) const
 {
     MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
@@ -479,62 +510,44 @@ void dCSR::normalize_rows()
         thrust::raw_pointer_cast(data.data()));
 }
 
-spECKWrapper::dCSR<float> dCSR::get_spECK_matrix(thrust::device_vector<unsigned int>& row_offsets_u, thrust::device_vector<unsigned int>& col_ids_u)
+std::tuple<thrust::device_vector<unsigned int>, thrust::device_vector<unsigned int>> dCSR::get_spECK_ids()
 {
-    spECKWrapper::dCSR<float> mat_speck;
-    mat_speck.rows = rows_;
-    mat_speck.cols = cols_;
-    mat_speck.nnz = nnz();
-
-    row_offsets_u = thrust::device_vector<unsigned int>(row_offsets.begin(), row_offsets.end());
-    mat_speck.row_offsets = thrust::raw_pointer_cast(row_offsets_u.data());
-
-    col_ids_u = thrust::device_vector<unsigned int>(col_ids.begin(), col_ids.end());
-    mat_speck.col_ids = thrust::raw_pointer_cast(col_ids_u.data());
-
-    mat_speck.data = thrust::raw_pointer_cast(data.data());
-    mat_speck.do_dealloc = false;
-    return mat_speck;
+    thrust::device_vector<unsigned int> row_offsets_u(row_offsets.begin(), row_offsets.end());
+    thrust::device_vector<unsigned int> col_ids_u(col_ids.begin(), col_ids.end());
+    return {row_offsets_u, col_ids_u};
 }
 
 dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B)
 {
     MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
 
-    std::cout<<"\n A_orig \n";
-    A.print();
-    thrust::device_vector<unsigned int> row_offsets_u_A, col_ids_u_A;
-    spECKWrapper::dCSR<float> A_sp = A.get_spECK_matrix(row_offsets_u_A, col_ids_u_A);
-    spECKWrapper::CSR<float> A_sp_cpu;
+    // std::cout<<"\n A_orig \n";
+    // A.print();
+    thrust::device_vector<unsigned int> row_offsets_u_A, col_ids_u_A, row_offsets_u_B, col_ids_u_B;
+    std::tie(row_offsets_u_A, col_ids_u_A) = A.get_spECK_ids();
+    std::tie(row_offsets_u_B, col_ids_u_B) = B.get_spECK_ids();
+
+    // spECKWrapper::dCSR<float> A_sp = A.get_spECK_matrix(row_offsets_u_A, col_ids_u_A);
+    // spECKWrapper::CSR<float> A_sp_cpu;
     
-    convert(A_sp_cpu, A_sp, 0);
-    std::string csrPathA = "A_sp_cpu.hicsr";
-    storeCSR(A_sp_cpu, csrPathA.c_str());
-    std::cout<<"\n A_cpu \n";
-    spECKWrapper::print<float>(A_sp_cpu);
-
-    std::cout<<"\n B_orig \n";
-    B.print();
-    thrust::device_vector<unsigned int> row_offsets_u_B, col_ids_u_B;
-    spECKWrapper::dCSR<float> B_sp = B.get_spECK_matrix(row_offsets_u_B, col_ids_u_B);
-    spECKWrapper::CSR<float> B_sp_cpu;
-
-    convert(B_sp_cpu, B_sp, 0);
-    std::string csrPathB = "B_sp_cpu.hicsr";
-    storeCSR(B_sp_cpu, csrPathB.c_str());
-    std::cout<<"\n B_cpu \n";
-    spECKWrapper::print<float>(B_sp_cpu);
+    // std::cout<<"Writing matrices\n";
+    // convert(A_sp_cpu, A_sp, 0);
+    // std::string csrPathA = "A_big.hicsr";
+    // storeCSR(A_sp_cpu, csrPathA.c_str());
+    // std::cout<<"\n A_cpu \n";
+    // spECKWrapper::print<float>(A_sp_cpu);
 
     spECKWrapper::dCSR<float> res_sp;
 
     auto config = spECK::spECKConfig::initialize(get_cuda_device());
 
     Timings timings;
-    spECK::MultiplyspECK<float, 4, 1024, spECK_DYNAMIC_MEM_PER_BLOCK, spECK_STATIC_MEM_PER_BLOCK>(A_sp, B_sp, res_sp, config, timings);
-    
-    spECKWrapper::CSR<float> res_sp_cpu;
-    convert(res_sp_cpu, res_sp, 0);
-    spECKWrapper::print<float>(res_sp_cpu);
+    spECK::MultiplyspECK_raw<float, 4, 1024, spECK_DYNAMIC_MEM_PER_BLOCK, spECK_STATIC_MEM_PER_BLOCK>(
+        thrust::raw_pointer_cast(row_offsets_u_A.data()), thrust::raw_pointer_cast(col_ids_u_A.data()), thrust::raw_pointer_cast(A.data.data()),
+        A.rows(), A.cols(), A.nnz(),
+        thrust::raw_pointer_cast(row_offsets_u_B.data()), thrust::raw_pointer_cast(col_ids_u_B.data()), thrust::raw_pointer_cast(B.data.data()),
+        B.rows(), B.cols(), B.nnz(),
+        res_sp, config, timings);
 
     dCSR res;
     res.rows_ = res_sp.rows;
