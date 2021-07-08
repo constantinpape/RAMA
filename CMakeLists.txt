@@ -4,7 +4,7 @@ set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g")
 
 cmake_minimum_required(VERSION 2.8.12)
 
-set(CMAKE_CUDA_ARCHITECTURES 60) #Use JIT compilation? 
+set(CMAKE_CUDA_ARCHITECTURES 70) #Use JIT compilation? 
 
 include_directories(external/thrust/)
 include_directories(external/thrust/dependencies/cub)

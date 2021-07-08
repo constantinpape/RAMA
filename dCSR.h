@@ -10,7 +10,6 @@
 #include <thrust/generate.h>
 #include <cusparse.h>
 #include "time_measure_util.h"
-#include <dCSR_sp.h>
 #include <sstream>   
 
 class dCSR {

@@ -8,6 +8,7 @@
 #include "utils.h"
 #include <Multiply.h>
 #include <CSR.h>
+#include <dCSR_sp.h>
 
 void dCSR::print() const
 {
