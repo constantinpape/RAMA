@@ -324,6 +324,16 @@ dCSR pack_cycles(cusparseHandle_t handle, const dCSR& A_symm, const int max_trie
     std::tie(i_symm, j_symm, costs_symm) = to_undirected(i_d, j_d, costs_d);
 
     return dCSR(handle, i_symm.begin(), i_symm.end(), j_symm.begin(), j_symm.end(), costs_symm.begin(), costs_symm.end());
+
+dCSR contract_spECK(cusparseHandle_t handle, dCSR& A, dCSR& C)
+{
+    MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+    assert(A.cols() == A.rows());
+    dCSR intermed = multiply_spECK(handle, A, C);
+    dCSR C_trans = C.transpose(handle);
+    dCSR new_A = multiply_spECK(handle, C_trans, intermed);
+    assert(new_A.rows() == new_A.cols());
+    return new_A;
 }
 
 std::vector<int> parallel_gaec_cuda(dCSR& A)
@@ -377,6 +387,8 @@ std::vector<int> parallel_gaec_cuda(dCSR& A)
         std::tie(C, cur_node_mapping) = edge_contraction_matrix_cuda(handle, contract_cols, contract_rows, A.rows());
 
         dCSR new_A = contract(handle, A, C);
+        dCSR new_A_spECK = contract_spECK(handle, A, C);
+        new_A.compare(new_A_spECK);
         std::cout << "contract C size " << C.cols() << "x" << C.rows() << "\n";
         std::cout << "original A size " << A.cols() << "x" << A.rows() << "\n";
         std::cout << "contracted A size " << new_A.cols() << "x" << new_A.rows() << "\n";
@@ -386,7 +398,7 @@ std::vector<int> parallel_gaec_cuda(dCSR& A)
         const float energy_reduction = thrust::reduce(diagonal.begin(), diagonal.end());
         std::cout << "energy reduction " << energy_reduction << "\n";
         //if(energy_reduction < 0.0)
-        if(has_bad_contractions(handle, new_A))
+        if(has_bad_contractions(handle, new_A) && false)
         {
             if(!try_edges_to_contract_by_maximum_matching)
                 contract_ratio *= 2.0; 

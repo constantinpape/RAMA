@@ -7,3 +7,6 @@
 [submodule "external/thrust"]
 	path = external/thrust
 	url = https://github.com/NVIDIA/thrust.git
+[submodule "external/spECK"]
+	path = external/spECK
+	url = https://github.com/GPUPeople/spECK.git

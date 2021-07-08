@@ -10,6 +10,8 @@
 #include <thrust/generate.h>
 #include <cusparse.h>
 #include "time_measure_util.h"
+#include <dCSR_sp.h>
+#include <sstream>   
 
 class dCSR {
     public:
@@ -39,6 +41,7 @@ class dCSR {
 
         friend dCSR multiply(cusparseHandle_t handle, dCSR& A, dCSR& B);
         friend dCSR multiply_slow(cusparseHandle_t handle, dCSR& A, dCSR& B);
+        friend dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B);
         friend thrust::device_vector<float> multiply(cusparseHandle_t handle, const dCSR& A, const thrust::device_vector<float>& x);
 
         std::tuple<thrust::device_vector<int>, const thrust::device_vector<int>&, const thrust::device_vector<float>&> export_coo(cusparseHandle_t handle) const;
@@ -47,6 +50,7 @@ class dCSR {
         void set_diagonal_to_zero(cusparseHandle_t handle);
         float sum();
         void print() const;
+        void compare(const dCSR& mat) const;
         void print_info_of(const int i) const;
 
         static thrust::device_vector<int> compute_row_offsets(cusparseHandle_t handle, const int rows, const thrust::device_vector<int>& col_ids, const thrust::device_vector<int>& row_ids);
@@ -62,8 +66,8 @@ class dCSR {
         const thrust::device_vector<float> get_data() const { return data; }
 
         thrust::device_vector<float> diagonal(cusparseHandle_t) const;
+        std::tuple<thrust::device_vector<unsigned int>, thrust::device_vector<unsigned int>> get_spECK_ids();
 
-    private:
         template<typename COL_ITERATOR, typename ROW_ITERATOR, typename DATA_ITERATOR>
             void init(cusparseHandle_t handle,
                     COL_ITERATOR col_id_begin, COL_ITERATOR col_id_end,
@@ -186,8 +190,7 @@ void dCSR::init(cusparseHandle_t handle,
     row_offsets = compute_row_offsets(handle, rows(), col_ids, row_ids);
 }
 
-
-
 dCSR multiply(cusparseHandle_t handle, const dCSR& A, const dCSR& B);
+dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B);
 dCSR multiply_slow(cusparseHandle_t handle, const dCSR& A, const dCSR& B);
 thrust::device_vector<float> multiply(cusparseHandle_t handle, const dCSR& A, const thrust::device_vector<float>& x);

@@ -6,6 +6,8 @@
 #include <ECLgraph.h>
 #include "time_measure_util.h"
 #include "utils.h"
+#include <Multiply.h>
+#include <CSR.h>
 
 void dCSR::print() const
 {
@@ -15,6 +17,37 @@ void dCSR::print() const
     for(size_t i=0; i<rows(); ++i)
         for(size_t l=row_offsets[i]; l<row_offsets[i+1]; ++l)
             std::cout << i << ", " << col_ids[l] << ", " << data[l] << "\n"; 
+}
+
+void dCSR::compare(const dCSR& mat) const
+{
+    float tol = 1.0;
+    assert(rows() == mat.rows());
+    assert(cols() == mat.cols());
+    assert(nnz() == mat.nnz());
+    thrust::host_vector<int> row_offsets_h = row_offsets;
+    thrust::host_vector<int> mat_row_offsets_h = mat.row_offsets;
+    thrust::host_vector<int> col_ids_h = col_ids;
+    thrust::host_vector<int> mat_col_ids_h = mat.col_ids;
+    thrust::host_vector<int> data_h = data;
+    thrust::host_vector<int> mat_data_h = mat.data;
+    for(size_t i=0; i<rows(); ++i)
+    {
+        assert(row_offsets_h[i] == mat_row_offsets_h[i]);
+        assert(row_offsets_h[i + 1] == mat_row_offsets_h[i + 1]);
+
+        for(size_t l=row_offsets_h[i]; l<row_offsets_h[i+1]; ++l)
+        {
+            assert(col_ids_h[l] == mat_col_ids_h[l]);
+            
+            assert(std::abs(data_h[l] / mat_data_h[l] - 1) > 0.01);
+            // if(std::abs(data_h[l] - mat_data_h[l]) > tol)
+            // {
+            //     std::cout<<"data_h[l]: "<<data_h[l]<<", mat_data_h[l]"<<mat_data_h[l]<<std::endl;
+            //     assert(false);
+            // }
+        }
+    }
 }
 
 dCSR dCSR::transpose(cusparseHandle_t handle) const
@@ -475,4 +508,59 @@ void dCSR::normalize_rows()
         thrust::raw_pointer_cast(row_offsets.data()), 
         thrust::raw_pointer_cast(col_ids.data()), 
         thrust::raw_pointer_cast(data.data()));
+}
+
+std::tuple<thrust::device_vector<unsigned int>, thrust::device_vector<unsigned int>> dCSR::get_spECK_ids()
+{
+    thrust::device_vector<unsigned int> row_offsets_u(row_offsets.begin(), row_offsets.end());
+    thrust::device_vector<unsigned int> col_ids_u(col_ids.begin(), col_ids.end());
+    return {row_offsets_u, col_ids_u};
+}
+
+dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B)
+{
+    MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME
+
+    // std::cout<<"\n A_orig \n";
+    // A.print();
+    thrust::device_vector<unsigned int> row_offsets_u_A, col_ids_u_A, row_offsets_u_B, col_ids_u_B;
+    std::tie(row_offsets_u_A, col_ids_u_A) = A.get_spECK_ids();
+    std::tie(row_offsets_u_B, col_ids_u_B) = B.get_spECK_ids();
+
+    // spECKWrapper::dCSR<float> A_sp = A.get_spECK_matrix(row_offsets_u_A, col_ids_u_A);
+    // spECKWrapper::CSR<float> A_sp_cpu;
+    
+    // std::cout<<"Writing matrices\n";
+    // convert(A_sp_cpu, A_sp, 0);
+    // std::string csrPathA = "A_big.hicsr";
+    // storeCSR(A_sp_cpu, csrPathA.c_str());
+    // std::cout<<"\n A_cpu \n";
+    // spECKWrapper::print<float>(A_sp_cpu);
+
+    spECKWrapper::dCSR<float> res_sp;
+
+    auto config = spECK::spECKConfig::initialize(get_cuda_device());
+
+    Timings timings;
+    spECK::MultiplyspECK_raw<float, 4, 1024, spECK_DYNAMIC_MEM_PER_BLOCK, spECK_STATIC_MEM_PER_BLOCK>(
+        thrust::raw_pointer_cast(row_offsets_u_A.data()), thrust::raw_pointer_cast(col_ids_u_A.data()), thrust::raw_pointer_cast(A.data.data()),
+        A.rows(), A.cols(), A.nnz(),
+        thrust::raw_pointer_cast(row_offsets_u_B.data()), thrust::raw_pointer_cast(col_ids_u_B.data()), thrust::raw_pointer_cast(B.data.data()),
+        B.rows(), B.cols(), B.nnz(),
+        res_sp, config, timings);
+
+    dCSR res;
+    res.rows_ = res_sp.rows;
+    res.cols_ = res_sp.cols;
+
+    thrust::device_ptr<unsigned int> row_offsets_ptr = thrust::device_pointer_cast(res_sp.row_offsets);
+    thrust::device_ptr<unsigned int> col_ids_ptr = thrust::device_pointer_cast(res_sp.col_ids);
+    thrust::device_ptr<float> data_ptr = thrust::device_pointer_cast(res_sp.data);
+
+    // copy memory to a new device_vector (which automatically allocates memory)
+    res.row_offsets = thrust::device_vector<int>(row_offsets_ptr, row_offsets_ptr + res_sp.rows + 1);
+    res.col_ids = thrust::device_vector<int>(col_ids_ptr, col_ids_ptr + res_sp.nnz); 
+    res.data = thrust::device_vector<float>(data_ptr, data_ptr + res_sp.nnz);
+
+    return res; 
 }

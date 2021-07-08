@@ -1,10 +1,10 @@
 project(parallel_gaec LANGUAGES CXX CUDA)
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -rdynamic -lineinfo")
-# set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g")
+set(CMAKE_CUDA_FLAGS_DEBUG "${CMAKE_CUDA_FLAGS_DEBUG} -g")
 
 cmake_minimum_required(VERSION 2.8.12)
 
-# set(CMAKE_CUDA_ARCHITECTURES 75) #Use JIT compilation? 
+set(CMAKE_CUDA_ARCHITECTURES 60) #Use JIT compilation? 
 
 include_directories(external/thrust/)
 include_directories(external/thrust/dependencies/cub)
@@ -30,13 +30,18 @@ add_subdirectory(external/pybind11)
 add_library(multicut_text_parser multicut_text_parser.cpp)
 
 add_library(parallel_gaec_eigen parallel_gaec_eigen.cpp)
-target_link_libraries(parallel_gaec_eigen parallel_gaec) 
+target_link_libraries(parallel_gaec_eigen parallel_gaec)
 
 add_executable(parallel_gaec_eigen_test parallel_gaec_eigen_test.cpp)
 target_link_libraries(parallel_gaec_eigen_test parallel_gaec_eigen)
 
+# SpECK:
+add_subdirectory(external/spECK)
+
 add_library(dCSR dCSR.cu)
-target_link_libraries(dCSR cusparse ECL-CC_11)
+target_include_directories(dCSR PUBLIC external/spECK/include)
+
+target_link_libraries(dCSR cusparse ECL-CC_11 spECKLib)
 
 add_library(ECL-CC_11 external/ECL-CC/ECL-CC_11.cu)
 target_include_directories(ECL-CC_11 INTERFACE external/ECL-CC)
