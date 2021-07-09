@@ -41,7 +41,7 @@ void dCSR::compare(const dCSR& mat) const
         {
             assert(col_ids_h[l] == mat_col_ids_h[l]);
             
-            assert(std::abs(data_h[l] / mat_data_h[l] - 1) > 0.01);
+            assert(std::abs(data_h[l] / mat_data_h[l] - 1) < 0.01);
             // if(std::abs(data_h[l] - mat_data_h[l]) > tol)
             // {
             //     std::cout<<"data_h[l]: "<<data_h[l]<<", mat_data_h[l]"<<mat_data_h[l]<<std::endl;
@@ -543,7 +543,7 @@ dCSR multiply_spECK(cusparseHandle_t handle, dCSR& A, dCSR& B)
     auto config = spECK::spECKConfig::initialize(get_cuda_device());
 
     Timings timings;
-    spECK::MultiplyspECK_raw<float, 4, 1024, spECK_DYNAMIC_MEM_PER_BLOCK, spECK_STATIC_MEM_PER_BLOCK>(
+    spECK::MultiplyspECK<float, 4, 1024, spECK_DYNAMIC_MEM_PER_BLOCK, spECK_STATIC_MEM_PER_BLOCK>(
         thrust::raw_pointer_cast(row_offsets_u_A.data()), thrust::raw_pointer_cast(col_ids_u_A.data()), thrust::raw_pointer_cast(A.data.data()),
         A.rows(), A.cols(), A.nnz(),
         thrust::raw_pointer_cast(row_offsets_u_B.data()), thrust::raw_pointer_cast(col_ids_u_B.data()), thrust::raw_pointer_cast(B.data.data()),

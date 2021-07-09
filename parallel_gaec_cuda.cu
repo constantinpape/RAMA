@@ -324,6 +324,7 @@ dCSR pack_cycles(cusparseHandle_t handle, const dCSR& A_symm, const int max_trie
     std::tie(i_symm, j_symm, costs_symm) = to_undirected(i_d, j_d, costs_d);
 
     return dCSR(handle, i_symm.begin(), i_symm.end(), j_symm.begin(), j_symm.end(), costs_symm.begin(), costs_symm.end());
+}
 
 dCSR contract_spECK(cusparseHandle_t handle, dCSR& A, dCSR& C)
 {
@@ -386,9 +387,9 @@ std::vector<int> parallel_gaec_cuda(dCSR& A)
         thrust::device_vector<int> cur_node_mapping;
         std::tie(C, cur_node_mapping) = edge_contraction_matrix_cuda(handle, contract_cols, contract_rows, A.rows());
 
-        dCSR new_A = contract(handle, A, C);
-        dCSR new_A_spECK = contract_spECK(handle, A, C);
-        new_A.compare(new_A_spECK);
+        // dCSR new_A = contract(handle, A, C);
+        dCSR new_A = contract_spECK(handle, A, C);
+        // new_A.compare(new_A_spECK);
         std::cout << "contract C size " << C.cols() << "x" << C.rows() << "\n";
         std::cout << "original A size " << A.cols() << "x" << A.rows() << "\n";
         std::cout << "contracted A size " << new_A.cols() << "x" << new_A.rows() << "\n";
