@@ -77,7 +77,10 @@ __global__ void pack_triangles_parallel(const int num_rep_edges,
                                     const int* const __restrict__ A_col_ids,
                                     float* __restrict__ A_data,
                                     const int first_rep_edge_index,
-                                    const int A_num_rows)
+                                    const int A_num_rows,
+                                    int3* __restrict__ triangle_vertices,
+                                    int* __restrict__ empty_tri_index,
+                                    int max_triangles)
 {
     int start_index = blockIdx.x * blockDim.x + threadIdx.x + first_rep_edge_index;
     int num_threads = blockDim.x * gridDim.x;
@@ -113,6 +116,9 @@ __global__ void pack_triangles_parallel(const int num_rep_edges,
                     atomicAdd(&A_data[found_upper_index], packing_value);
                     atomicAdd(&A_data[found_lower_index], packing_value);
                 }
+                int3 tri = make_int3(rep_edge_row, current_col_id, rep_edge_col);
+                if (empty_tri_index[0] < max_triangles)
+                    triangle_vertices[atomicAdd(empty_tri_index, 1)] = tri;
             }
         }
         A_data[rep_edge_index] = rep_edge_cost;
@@ -129,7 +135,10 @@ __global__ void pack_quadrangles_parallel(const int num_rep_edges,
     const int* const __restrict__ A_col_ids,
     float* __restrict__ A_data,
     const int first_rep_edge_index,
-    const int A_num_rows)
+    const int A_num_rows,
+    int3* __restrict__ triangle_vertices,
+    int* __restrict__ empty_tri_index,
+    int max_triangles)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int num_threads = blockDim.x * gridDim.x;
@@ -178,6 +187,13 @@ __global__ void pack_quadrangles_parallel(const int num_rep_edges,
                             atomicAdd(&A_data[v1_n2_edge_index], packing_value);
                             atomicAdd(&A_data[v2_edge_index], packing_value);    
                         }
+                        int3 tri1 = make_int3(v1, v1_n1, v2);
+                        if (empty_tri_index[0] < max_triangles)
+                            triangle_vertices[atomicAdd(empty_tri_index, 1)] = tri1;
+                        int3 tri2 = make_int3(v1_n1, v1_n2, v2);
+                        if (empty_tri_index[0] < max_triangles)
+                            triangle_vertices[atomicAdd(empty_tri_index, 1)] = tri2;
+            
                     }
                 }
             }
@@ -332,6 +348,8 @@ double parallel_small_cycle_packing_cuda(cusparseHandle_t handle, dCOO& A, const
 
     int threadCount = 256;
     int blockCount = ceil(num_rep_edges / (float) threadCount);
+    thrust::device_vector<int3> triangles(num_rep_edges * 10);
+    thrust::device_vector<int> empty_tri_index(1, 0);
 
     for (int t = 0; t < max_tries_triangles; t++)
     {
@@ -344,10 +362,13 @@ double parallel_small_cycle_packing_cuda(cusparseHandle_t handle, dCOO& A, const
             A.get_col_ids_ptr(),
             A.get_writeable_data_ptr(),
             nr_positive_edges,
-            A.rows());
+            A.rows(), 
+            thrust::raw_pointer_cast(triangles.data()),
+            thrust::raw_pointer_cast(empty_tri_index.data()),
+            triangles.size());
         
         lb = get_lb(A.get_data());
-        std::cout<<"packing triangles, itr: "<<t<<", lb: "<<lb<<std::endl;
+        std::cout<<"packing triangles, itr: "<<t<<", lb: "<<lb<<", found # of triangles: "<<empty_tri_index[0]<<std::endl;
     }
     for (int t = 0; t < max_tries_quads; t++)
     {
@@ -360,10 +381,13 @@ double parallel_small_cycle_packing_cuda(cusparseHandle_t handle, dCOO& A, const
             A.get_col_ids_ptr(),
             A.get_writeable_data_ptr(),
             nr_positive_edges,
-            A.rows());
+            A.rows(),
+            thrust::raw_pointer_cast(triangles.data()),
+            thrust::raw_pointer_cast(empty_tri_index.data()),
+            triangles.size());
         
         lb = get_lb(A.get_data());
-        std::cout<<"packing quadrangles, itr: "<<t<<", lb: "<<lb<<std::endl;
+        std::cout<<"packing quadrangles, itr: "<<t<<", lb: "<<lb<<", found # of triangles: "<<empty_tri_index[0]<<std::endl;
     }
 
     return lb;

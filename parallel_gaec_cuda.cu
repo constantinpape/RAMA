@@ -212,7 +212,7 @@ std::vector<int> parallel_gaec_cuda(dCOO& A)
         {
             // std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching(handle, A);
             std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching_vertex_based(handle, A);
-            if(contract_cols.size() < A.rows()*0.1)
+            if(contract_cols.size() < A.rows()*0.05)
             {
                 std::cout << "# edges to contract = " << contract_cols.size() << ", # vertices = " << A.rows() << "\n";
                 std::cout << "switching to sorting based contraction edge selection\n";

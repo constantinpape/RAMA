@@ -87,8 +87,8 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> filter_edges_
     int numBlocks = ceil(A.rows() / (float) numThreads);
     thrust::device_vector<bool> still_running(1);
     thrust::device_vector<int> A_row_offsets = A.compute_row_offsets(handle);
-
-    for (int t = 0; t < 5; t++)
+    int prev_num_edges = 0;
+    for (int t = 0; t < 10; t++)
     {
         thrust::fill(thrust::device, still_running.begin(), still_running.end(), false);
 
@@ -104,9 +104,12 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> filter_edges_
             thrust::raw_pointer_cast(v_matched.data()),
             thrust::raw_pointer_cast(still_running.data()));
 
-        std::cout << "matched sum = " << thrust::reduce(v_matched.begin(), v_matched.end(), 0) << "\n";
-        if (!still_running[0])
+        int current_num_edges = thrust::reduce(v_matched.begin(), v_matched.end(), 0);
+        float rel_increase = (current_num_edges - prev_num_edges) / (prev_num_edges + 1.0f);
+        std::cout << "matched sum: " << current_num_edges << ", rel_increase: " << rel_increase <<"\n";
+        if (!still_running[0] || rel_increase < 0.1)
             break;
+        prev_num_edges = current_num_edges;
     }
     thrust::device_vector<int> matched_rows(A.rows());
     thrust::sequence(matched_rows.begin(), matched_rows.end(), 0);
