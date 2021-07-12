@@ -8,6 +8,7 @@
 #include <thrust/transform_scan.h>
 #include <thrust/transform.h>
 #include "maximum_matching_vertex_based.h"
+#include "maximum_matching_edge_based.h"
 #include "icp_small_cycles.h"
 #include "utils.h"
 
@@ -183,6 +184,13 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> edges_to_cont
     return filter_edges_by_matching_vertex_based(handle, A);
 }
 
+std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> edges_to_contract_by_maximum_matching_edge_based(cusparseHandle_t handle, dCOO& A)
+{
+    MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+    MEASURE_FUNCTION_EXECUTION_TIME;
+    return filter_edges_by_matching_edge_based(handle, A);
+}
+
 std::vector<int> parallel_gaec_cuda(dCOO& A)
 {
     MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
@@ -206,16 +214,16 @@ std::vector<int> parallel_gaec_cuda(dCOO& A)
         // {
         //     dCOO A_dir = A.export_directed(handle);
         //     parallel_small_cycle_packing_cuda(handle, A_dir, 1, 0);
-        //     A = A_dir.export_undirected(handle); //TODO: just replace data ?
+        //     A = A_dir.export_undirected(handle);
         // }
         thrust::device_vector<int> contract_cols, contract_rows;
         if(try_edges_to_contract_by_maximum_matching)
         {
-            // std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching(handle, A);
-            std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching_vertex_based(handle, A);
-            if(contract_cols.size() < A.rows()*0.1)
+            // std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching_vertex_based(handle, A);
+            std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching_edge_based(handle, A);
+            std::cout << "# edges to contract = " << contract_cols.size() << ", # vertices = " << A.rows() << "\n";
+            if(contract_cols.size() < float(A.rows()) * 0.25)
             {
-                std::cout << "# edges to contract = " << contract_cols.size() << ", # vertices = " << A.rows() << "\n";
                 std::cout << "switching to sorting based contraction edge selection\n";
                 try_edges_to_contract_by_maximum_matching = false;    
             }

@@ -11,7 +11,7 @@ __device__ int get_best_neighbour(const int row_index,
                                 const int* const __restrict__ row_offsets,
                                 const int* const __restrict__ col_ids, 
                                 const float* const __restrict__ data,
-                                const int* const __restrict__ ignore_vertices)
+                                const bool* const __restrict__ ignore_vertices)
 {
     int n_id = -1;
     float max_value = 0.0;
@@ -32,7 +32,7 @@ __global__ void pick_best_neighbour(const int num_nodes,
                                     const int* const __restrict__ row_offsets, 
                                     const int* const __restrict__ col_ids, 
                                     const float* const __restrict__ costs,
-                                    const int* const __restrict__ v_matched, 
+                                    const bool* const __restrict__ v_matched, 
                                     int* __restrict__ v_best_neighbours)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -48,7 +48,7 @@ __global__ void pick_best_neighbour(const int num_nodes,
 
 __global__ void match_neighbours(const int num_nodes, 
                                 const int* const __restrict__ v_best_neighbours,
-                                int* __restrict__ v_matched,
+                                bool* __restrict__ v_matched,
                                 bool* __restrict__ still_running)
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -64,8 +64,8 @@ __global__ void match_neighbours(const int num_nodes,
             
         if (v_best_neighbours[v_best] == v)
         {
-            v_matched[v] = 1;
-            v_matched[v_best] = 1;
+            v_matched[v] = true;
+            v_matched[v_best] = true;
             *still_running = true;
         }
     }
@@ -73,16 +73,16 @@ __global__ void match_neighbours(const int num_nodes,
 
 struct is_unmatched {
     __host__ __device__
-        inline int operator()(const thrust::tuple<int,int,int> e)
+        inline int operator()(const thrust::tuple<int,int,bool> e)
         {
-            return thrust::get<2>(e) == 0;
+            return !thrust::get<2>(e);
         }
 };
 
 std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> filter_edges_by_matching_vertex_based(cusparseHandle_t handle, const dCOO& A)
 {
     thrust::device_vector<int> v_best_neighbours(A.rows(), -1);
-    thrust::device_vector<int> v_matched(A.rows(), 0);
+    thrust::device_vector<bool> v_matched(A.rows(), false);
 
     int numBlocks = ceil(A.rows() / (float) numThreads);
     thrust::device_vector<bool> still_running(1);

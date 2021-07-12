@@ -50,8 +50,11 @@ target_link_libraries(icp_small_cycles dCOO cusparse)
 add_library(maximum_matching_vertex_based maximum_matching_vertex_based.cu)
 target_link_libraries(maximum_matching_vertex_based cusparse dCOO)
 
+add_library(maximum_matching_edge_based maximum_matching_edge_based.cu)
+target_link_libraries(maximum_matching_edge_based cusparse dCOO)
+
 add_library(parallel_gaec_cuda parallel_gaec_cuda.cu)
-target_link_libraries(parallel_gaec_cuda dCOO cusparse icp_small_cycles maximum_matching_vertex_based)
+target_link_libraries(parallel_gaec_cuda dCOO cusparse icp_small_cycles maximum_matching_vertex_based maximum_matching_edge_based)
 
 add_executable(icp_test icp_test.cu)
 target_link_libraries(icp_test cusparse icp_small_cycles)
