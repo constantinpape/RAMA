@@ -303,6 +303,7 @@ std::tuple<dCOO, thrust::device_vector<int>, thrust::device_vector<int>, int> cr
                         pos_col_ids_symm.begin(), pos_col_ids_symm.end(),
                         pos_row_ids_symm.begin(), pos_row_ids_symm.end(), 
                         pos_costs_symm.begin(), pos_costs_symm.end());
+        A_pos.sort(handle);
     }
     return {A_pos, row_ids_rep, col_ids_rep, nr_positive_edges};
 }
@@ -311,6 +312,7 @@ std::tuple<dCOO, thrust::device_vector<int>, thrust::device_vector<int>, int> cr
 double parallel_small_cycle_packing_cuda(cusparseHandle_t handle, dCOO& A, const int max_tries_triangles, const int max_tries_quads)
 {
     MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
+    A.sort(handle);
 
     int num_nodes = A.rows();
     int num_edges = A.edges();

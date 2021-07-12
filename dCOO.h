@@ -51,7 +51,8 @@ class dCOO {
         dCOO contract_cuda(cusparseHandle_t handle, const thrust::device_vector<int>& node_mapping);
         dCOO export_undirected(cusparseHandle_t handle);
         dCOO export_directed(cusparseHandle_t handle);
-
+        bool sorted() const { return is_sorted; }
+        void sort(cusparseHandle_t handle);
     private:
         template<typename COL_ITERATOR, typename ROW_ITERATOR, typename DATA_ITERATOR>
             void init(cusparseHandle_t handle,
@@ -63,6 +64,7 @@ class dCOO {
         thrust::device_vector<float> data;
         thrust::device_vector<int> row_ids;
         thrust::device_vector<int> col_ids; 
+        bool is_sorted = false;
 };
 
 inline void coo_sorting(cusparseHandle_t handle, thrust::device_vector<int>& col_ids, thrust::device_vector<int>& row_ids)
@@ -156,15 +158,16 @@ void dCOO::init(cusparseHandle_t handle,
     col_ids = thrust::device_vector<int>(col_id_begin, col_id_end);
     data = thrust::device_vector<float>(data_begin, data_end);
 
-    coo_sorting(handle, col_ids, row_ids, data);
+    // sort manually by calling sort()
+    // coo_sorting(handle, col_ids, row_ids, data);
 
-    // now row indices are non-decreasing
-    assert(thrust::is_sorted(row_ids.begin(), row_ids.end()));
+    // // now row indices are non-decreasing
+    // assert(thrust::is_sorted(row_ids.begin(), row_ids.end()));
 
     if(cols_ == 0)
         cols_ = *thrust::max_element(col_ids.begin(), col_ids.end()) + 1;
     assert(cols_ > *thrust::max_element(col_ids.begin(), col_ids.end()));
     if(rows_ == 0)
-        rows_ = row_ids.back() + 1;
+        rows_ = *thrust::max_element(row_ids.begin(), row_ids.end()) + 1;
     assert(rows_ > *thrust::max_element(row_ids.begin(), row_ids.end()));
 }

@@ -179,6 +179,7 @@ std::tuple<thrust::device_vector<int>, thrust::device_vector<int>> edges_to_cont
 {
     MEASURE_CUMULATIVE_FUNCTION_EXECUTION_TIME;
     MEASURE_FUNCTION_EXECUTION_TIME;
+    A.sort(handle);
     return filter_edges_by_matching_vertex_based(handle, A);
 }
 
@@ -212,7 +213,7 @@ std::vector<int> parallel_gaec_cuda(dCOO& A)
         {
             // std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching(handle, A);
             std::tie(contract_cols, contract_rows) = edges_to_contract_by_maximum_matching_vertex_based(handle, A);
-            if(contract_cols.size() < A.rows()*0.01)
+            if(contract_cols.size() < A.rows()*0.1)
             {
                 std::cout << "# edges to contract = " << contract_cols.size() << ", # vertices = " << A.rows() << "\n";
                 std::cout << "switching to sorting based contraction edge selection\n";
