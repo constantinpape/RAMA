@@ -362,7 +362,7 @@ std::tuple<dCOO, thrust::device_vector<int>, thrust::device_vector<int>, int> cr
         std::tie(pos_row_ids_symm, pos_col_ids_symm, pos_costs_symm) = to_undirected(row_ids_rep.begin(), row_ids_rep.begin() + nr_positive_edges,
                                                                                     col_ids_rep.begin(), col_ids_rep.begin() + nr_positive_edges,
                                                                                     costs.begin(), costs.begin() + nr_positive_edges);
-        A_pos = dCOO(handle, std::max(A.rows(), A.cols()), std::max(A.rows(), A.cols()),
+        A_pos = dCOO(std::max(A.rows(), A.cols()), std::max(A.rows(), A.cols()),
                         pos_col_ids_symm.begin(), pos_col_ids_symm.end(),
                         pos_row_ids_symm.begin(), pos_row_ids_symm.end(), 
                         pos_costs_symm.begin(), pos_costs_symm.end());
@@ -459,8 +459,7 @@ std::tuple<double, dCOO, thrust::device_vector<int>, thrust::device_vector<int>,
     cusparseHandle_t handle;
     checkCuSparseError(cusparseCreate(&handle), "cusparse init failed");
     
-    dCOO A(handle, 
-        i.begin(), i.end(),
+    dCOO A(i.begin(), i.end(),
         j.begin(), j.end(), 
         costs.begin(), costs.end());
     
