@@ -377,7 +377,7 @@ std::tuple<double, thrust::device_vector<int>, thrust::device_vector<int>, thrus
     thrust::device_vector<int> triangles_v3(num_rep_edges * 10); //TODO
     thrust::device_vector<int> empty_tri_index(1, 0);
 
-    pack_triangles_parallel<<<blockCount, threadCount>>>(num_rep_edges, 
+    find_triangles_parallel<<<blockCount, threadCount>>>(num_rep_edges, 
         thrust::raw_pointer_cast(row_ids_rep.data()), 
         thrust::raw_pointer_cast(col_ids_rep.data()), 
         thrust::raw_pointer_cast(A_pos_row_offsets.data()),

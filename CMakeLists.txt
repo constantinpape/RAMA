@@ -47,6 +47,9 @@ target_link_libraries(cc_gpu_test ECL-CC_11 cusparse)
 add_library(icp_small_cycles icp_small_cycles.cu)
 target_link_libraries(icp_small_cycles dCOO cusparse)
 
+add_library(conflicted_cyc_enumerate conflicted_cyc_enumerate.cu)
+target_link_libraries(conflicted_cyc_enumerate dCOO)
+
 add_library(maximum_matching_vertex_based maximum_matching_vertex_based.cu)
 target_link_libraries(maximum_matching_vertex_based cusparse dCOO)
 
@@ -58,6 +61,9 @@ target_link_libraries(icp_test cusparse icp_small_cycles)
 
 add_executable(parallel_gaec_cuda_test parallel_gaec_cuda_test.cpp)
 target_link_libraries(parallel_gaec_cuda_test parallel_gaec_cuda)
+
+add_executable(conflicted_cyc_enumerate_test conflicted_cyc_enumerate_test.cu)
+target_link_libraries(conflicted_cyc_enumerate_test conflicted_cyc_enumerate)
 
 pybind11_add_module(parallel_gaec_py parallel_gaec_py.cpp)
 target_link_libraries(parallel_gaec_py PRIVATE parallel_gaec_eigen multicut_text_parser parallel_gaec_cuda)

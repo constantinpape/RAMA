@@ -58,7 +58,7 @@ struct remove_bad_contraction_edges_func
     const int nr_ccs;
     const float* cc_cost;
     __host__ __device__
-        int operator()(thrust::tuple<int,int> t)
+        int operator()(const thrust::tuple<int,int>& t)
         {
             const int cc = thrust::get<0>(t);
             const int node_id = thrust::get<1>(t);
