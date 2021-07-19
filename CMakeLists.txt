@@ -78,6 +78,3 @@ target_link_libraries(multicut_parallel_icp_gaec_cuda_text_input multicut_text_p
 
 add_executable(maximum_matching_vertex_based_test maximum_matching_vertex_based_test.cu)
 target_link_libraries(maximum_matching_vertex_based_test cusparse dCOO maximum_matching_vertex_based)
-
-add_executable(icp_cuda_text_input icp_cuda_text_input.cu)
-target_link_libraries(icp_cuda_text_input icp_small_cycles multicut_text_parser)

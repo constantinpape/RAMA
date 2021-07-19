@@ -40,6 +40,8 @@ class dCOO {
         void remove_diagonal();
 
         thrust::device_vector<int> compute_row_offsets() const;
+        thrust::device_vector<int> compute_row_offsets(cusparseHandle_t handle) const; //TODO: These two version do not match.
+        thrust::device_vector<int> compute_row_offsets(cusparseHandle_t handle, const int rows, const thrust::device_vector<int>& row_ids) const;
 
         const int* get_row_ids_ptr() const { return thrust::raw_pointer_cast(row_ids.data()); }
         const int* get_col_ids_ptr() const { return thrust::raw_pointer_cast(col_ids.data()); }

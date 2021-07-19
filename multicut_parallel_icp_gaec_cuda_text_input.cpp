@@ -2,6 +2,7 @@
 #include "multicut_text_parser.h"
 #include "icp_small_cycles.h"
 #include "multicut_message_passing.h"
+#include <thrust/device_vector.h>
 #include<stdexcept>
 
 int main(int argc, char** argv)
@@ -13,10 +14,11 @@ int main(int argc, char** argv)
     std::vector<float> costs;
     std::tie(i,j,costs) = read_file(argv[1]);
 
-    double lb;
-    dCOO A;
+    dCOO A(i.begin(), i.end(), j.begin(), j.end(), costs.begin(), costs.end());
     thrust::device_vector<int> triangles_v1, triangles_v2, triangles_v3;
-    std::tie(lb, A, triangles_v1, triangles_v2, triangles_v3) = parallel_small_cycle_packing_cuda(i, j, costs, 1, 1);
+    cusparseHandle_t handle;
+    cusparseCreate(&handle);
+    std::tie(triangles_v1, triangles_v2, triangles_v3) = parallel_small_cycle_packing_cuda(handle, A);
 
     thrust::device_vector<int> i_repam(i.begin(), i.end());
     thrust::device_vector<int> j_repam(j.begin(), j.end());
