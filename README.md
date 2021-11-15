@@ -3,9 +3,6 @@ Solves multicut (correlation clustering) problems orders of magnitude faster tha
 
 ![animation](./misc/contraction_animation.gif)
 
-## Requirements
-We use `CUDA 11.2` and `GCC 10`. Other combinations might also work but not tested. `CMake` is required for compilation.
-
 ## Running
 Currently https://anonymous.4open.science/ does not allow adding submodules and downloading the repo. So current files can only be viewed, we will make full code available upon acceptance.
 
