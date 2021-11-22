@@ -37,3 +37,5 @@ if(WITH_TORCH)
     message(STATUS "TORCH_PYTHON_LIBRARY: ${TORCH_PYTHON_LIBRARY}") # https://github.com/pytorch/pytorch/issues/38122#issuecomment-694203281
     target_link_libraries(rama_py PRIVATE "${TORCH_LIBRARIES}" ${TORCH_PYTHON_LIBRARY}) 
 endif()
+
+pybind11_add_module(rand_index_py rand_index_py.cpp)

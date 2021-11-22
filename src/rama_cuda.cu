@@ -138,7 +138,7 @@ std::tuple<thrust::device_vector<int>, double, std::vector<std::vector<int>> > r
     return {node_mapping, final_lb, timeline};
 }
 
-std::tuple<std::vector<int>, double, int, std::vector<std::vector<int>> > rama_cuda(const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& costs, const multicut_solver_options& opts)
+std::tuple<std::vector<int>, double, int, std::vector<std::vector<int>> > rama_cuda(const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& costs, const multicut_solver_options& opts, const bool contains_duplicate_edges)
 {
     const int cuda_device = get_cuda_device();
     cudaSetDevice(cuda_device);
@@ -148,7 +148,12 @@ std::tuple<std::vector<int>, double, int, std::vector<std::vector<int>> > rama_c
         std::cout << "Going to use " << prop.name << " " << prop.major << "." << prop.minor << ", device number " << cuda_device << "\n";
 
     dCOO A(i.begin(), i.end(), j.begin(), j.end(), costs.begin(), costs.end(), true);
-    
+    if (contains_duplicate_edges)
+    {
+        thrust::device_vector<int> identity_mapping(A.max_dim());
+        thrust::sequence(identity_mapping.begin(), identity_mapping.end());
+        A = A.contract_cuda(identity_mapping); // Merge duplicate edges and sum the costs.
+    }
     thrust::device_vector<int> node_mapping;
     double lb;
     std::vector<std::vector<int>> timeline;
@@ -162,10 +167,16 @@ std::tuple<std::vector<int>, double, int, std::vector<std::vector<int>> > rama_c
     return {h_node_mapping, lb, time_duration, timeline};
 }
 
-std::tuple<thrust::device_vector<int>, double> rama_cuda(const thrust::device_vector<int>& i, const thrust::device_vector<int>& j, const thrust::device_vector<float>& costs, const multicut_solver_options& opts, const int device)
+std::tuple<thrust::device_vector<int>, double> rama_cuda(const thrust::device_vector<int>& i, const thrust::device_vector<int>& j, const thrust::device_vector<float>& costs, const multicut_solver_options& opts, const int device, const bool contains_duplicate_edges)
 {
     cudaSetDevice(device);
     dCOO A(i.begin(), i.end(), j.begin(), j.end(), costs.begin(), costs.end(), true);
+    if (contains_duplicate_edges)
+    {
+        thrust::device_vector<int> identity_mapping(A.max_dim());
+        thrust::sequence(identity_mapping.begin(), identity_mapping.end());
+        A = A.contract_cuda(identity_mapping); // Merge duplicate edges and sum the costs.
+    }
     thrust::device_vector<int> node_mapping;
     double lb;
     std::vector<std::vector<int>> timeline;

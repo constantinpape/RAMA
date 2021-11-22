@@ -122,7 +122,7 @@ setup(
     version='0.0.5',
     description='Bindings for RAMA: Rapid algorithm for multicut.',
     packages=find_packages('.'),
-    ext_modules=[CMakeExtension(name='rama_py')],
+    ext_modules=[CMakeExtension(name='rama_py'), CMakeExtension(name='rand_index_py')],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
     setup_requires=['wheel']

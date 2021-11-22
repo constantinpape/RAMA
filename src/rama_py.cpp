@@ -83,8 +83,8 @@ PYBIND11_MODULE(rama_py, m) {
             return a.get_string();
         });
 
-    m.def("rama_cuda", [](const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& edge_costs, const multicut_solver_options& opts) {
-            return rama_cuda(i, j, edge_costs, opts);
+    m.def("rama_cuda", [](const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& edge_costs, const multicut_solver_options& opts, const bool contains_duplicate_edges = false) {
+            return rama_cuda(i, j, edge_costs, opts, contains_duplicate_edges);
             });
 
     m.def("read_multicut_file", [](const std::string& filename) {
