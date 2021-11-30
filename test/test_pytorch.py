@@ -3,7 +3,7 @@ import rama_py
 
 opts = rama_py.multicut_solver_options("P")
 opts.verbose=False
-res = rama_py.rama_cuda([0, 1, 2], [1, 2, 0], [1.1, -2, 3], opts)
+res = rama_py.rama_cuda([0, 1, 2], [1, 2, 0], [1.1, -2, 3], opts, False)
 expected = res[0]
 
 i = torch.Tensor([0, 1, 2]).to('cuda').to(torch.int32)
