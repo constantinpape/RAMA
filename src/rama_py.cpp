@@ -58,7 +58,8 @@ std::vector<torch::Tensor> rama_torch(
 #endif
 
 void rama_cuda_gpu_pointers(const int* const i, const int* const j, const float* const edge_costs, 
-                        int* node_labels, const int num_nodes, const int num_edges, const int gpuDeviceID, const multicut_solver_options& opts)
+                        int* const node_labels, const int num_nodes, const int num_edges, const int gpuDeviceID, 
+                        const multicut_solver_options& opts, bool contains_duplicate_edges = false)
 {
     thrust::device_vector<int> i_thrust(i, i + num_edges);
     thrust::device_vector<int> j_thrust(j, j + num_edges);
@@ -66,7 +67,7 @@ void rama_cuda_gpu_pointers(const int* const i, const int* const j, const float*
 	thrust::device_vector<int> node_mapping;
 	double lb;
 
-    std::tie(node_mapping, lb) = rama_cuda(std::move(i_thrust), std::move(j_thrust), std::move(costs_thrust), opts, gpuDeviceID);
+    std::tie(node_mapping, lb) = rama_cuda(std::move(i_thrust), std::move(j_thrust), std::move(costs_thrust), opts, gpuDeviceID, contains_duplicate_edges);
     thrust::copy(node_mapping.begin(), node_mapping.end(), node_labels);
 }
 
@@ -100,13 +101,13 @@ PYBIND11_MODULE(rama_py, m) {
             return rama_cuda(i, j, edge_costs, opts, contains_duplicate_edges);
             });
 
-    m.def("rama_cuda_gpu_pointers", [](long i_ptr, long j_ptr, long edge_costs_ptr, long const node_labels_out_ptr, 
-                                    const int num_nodes, const int num_edges, const int gpuDeviceID, const multicut_solver_options& opts) {
-            const int *i = reinterpret_cast<int*>(i_ptr);
-            const int *j = reinterpret_cast<int*>(j_ptr);
-            const float *edge_costs = reinterpret_cast<float*>(edge_costs_ptr);
-            int *node_labels = reinterpret_cast<int*>(node_labels_out_ptr);
-            return rama_cuda_gpu_pointers(i, j, edge_costs, node_labels, num_nodes, num_edges, gpuDeviceID, opts);
+    m.def("rama_cuda_gpu_pointers", [](const long i_ptr, const long j_ptr, const long edge_costs_ptr, const long node_labels_out_ptr, 
+                                    const int num_nodes, const int num_edges, const int gpuDeviceID, const multicut_solver_options& opts, const bool contains_duplicate_edges = false) {
+            const int* const i = reinterpret_cast<const int* const>(i_ptr);
+            const int* const j = reinterpret_cast<const int* const>(j_ptr);
+            const float* const edge_costs = reinterpret_cast<const float* const>(edge_costs_ptr);
+            int* const node_labels = reinterpret_cast<int* const>(node_labels_out_ptr);
+            return rama_cuda_gpu_pointers(i, j, edge_costs, node_labels, num_nodes, num_edges, gpuDeviceID, opts, contains_duplicate_edges);
             });
 
     m.def("read_multicut_file", [](const std::string& filename) {
