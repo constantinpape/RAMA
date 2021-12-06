@@ -61,7 +61,7 @@ Does not require compiling RAMA with PyTorch support (as done below). This optio
 - ** Direct binding of Torch Tensors: **
 To use this functionality ensure that PyTorch is built with the same CUDA version as the one used in this code and the ABI's match (see https://discuss.pytorch.org/t/undefined-symbol-when-import-lltm-cpp-extension/32627/7 for more info). Support for PyTorch can be enabled by:
 ```
-WITH_TORCH=ON pip install setup.py
+WITH_TORCH=ON pip install .
 ```
 After this you should be able to run `test/test_pytorch.py` without any errors. To suppress solver command line output set `opts.verbose=False`.
 
