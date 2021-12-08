@@ -47,14 +47,20 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
             assert(node_labels.shape == node_labels_gt.shape)
             node_labels_cpu = node_labels.cpu().numpy()
             node_labels_gt_cpu = node_labels_gt.cpu().numpy()
-            incorrect_edge_i, incorrect_edge_j = rand_index_py.compute_incorrect_edge_indices(
-                node_labels_cpu, node_labels_gt_cpu
+            incorrect_edge_i, incorrect_edge_j = rand_index_py.compute_incorrect_edge_indices_sampled(
+                node_labels_cpu, node_labels_gt_cpu, params['rand_index_subsampling_factor']
             )
             # Compute incorrect edge labels and indices.
             incorrect_edge_indices = torch.stack((
                 torch.IntTensor(incorrect_edge_i), torch.IntTensor(incorrect_edge_j)
             ), 1).to(uv_costs.device)
             incorrect_edge_labels = get_edge_labels(node_labels, incorrect_edge_indices)
+
+            if params['loss_on_input_adj']:
+                edge_labels_gt = get_edge_labels(node_labels_gt, uv_ids)
+                incorrect_uv_edge_locations = torch.nonzero(edge_labels_gt != uv_edge_labels).squeeze()
+                incorrect_edge_indices = torch.cat((incorrect_edge_indices, uv_ids[incorrect_uv_edge_locations, :]), 0)
+                incorrect_edge_labels = torch.cat((incorrect_edge_labels, uv_edge_labels[incorrect_uv_edge_locations]), 0)
 
         ctx.params = params
         ctx.device = uv_costs.device
@@ -102,21 +108,29 @@ class MulticutModuleWithRandIndex(torch.nn.Module):
     """
     Torch module for Multicut Instances. Only implemented for one multicut instance for now (batch-size 1)
     """
-    def __init__(self, loss_min_scaling, loss_max_scaling, num_grad_samples):
+    def __init__(self, loss_min_scaling, loss_max_scaling, num_grad_samples, rand_index_subsampling_factor = 16, loss_on_input_adj = True):
         """
         loss_min_scaling: Minimum value of pertubation.
             Actual value is sampled in [loss_min_scaling, loss_max_scaling].
         loss_max_scaling: Maximum value of pertubation.
             Actual value is sampled in [loss_min_scaling, loss_max_scaling].
         num_grad_samples: Number of times to average the gradients by sampling loss scalar.
+        rand_index_subsampling_factor: Sample (rand_index_subsampling_factor^2) times less edges as in fully connected graph.
+            Value of rand_index_subsampling_factor = 1 computes rand index on complete graph (slow)
+        loss_on_input_adj: Forcefully incorporate the input graph structure into the rand index calculation as well. 
+            Only applied when rand_index_subsampling_factor > 1.
         """
         super().__init__()
         solver_opts = rama_py.multicut_solver_options("PD")
         solver_opts.verbose = False
+        if (rand_index_subsampling_factor <= 1):
+            loss_on_input_adj = False
         self.params = {"solver_opts": solver_opts,
                        "min_pert": loss_min_scaling,
                        "max_pert": loss_max_scaling,
-                       "num_grad_samples": num_grad_samples}
+                       "num_grad_samples": num_grad_samples,
+                       "rand_index_subsampling_factor": rand_index_subsampling_factor,
+                       "loss_on_input_adj": loss_on_input_adj}
         self.solver = MultiCutSolverWithRandIndex()
 
     def forward(self, uv_ids, uv_costs, node_labels_gt=None):

@@ -38,4 +38,4 @@ if(WITH_TORCH)
     target_link_libraries(rama_py PRIVATE "${TORCH_LIBRARIES}" ${TORCH_PYTHON_LIBRARY}) 
 endif()
 
-pybind11_add_module(rand_index_py rand_index_py.cpp)
+pybind11_add_module(rand_index_py rand_index_py.cu)
