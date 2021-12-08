@@ -18,10 +18,18 @@ OFFSETS = [
 
 def get_model():
     n_out = len(OFFSETS)
+
+    # TODO not sure what exactly we should do for the activation
+    # as RAMA probably expects costs in range ]-inf,inf[ instead of [0,1]
+    # so we could either use no activation or a Sigmoid followed by rescaling into ]-inf,inf[
+    # the latter might be beneficial because it ensures costs in a sensible range in the beginning of training
+    # final_activation = "Sigmoid"
+    final_activation = None
+
     model = UNet2d(
         in_channels=1,
         out_channels=n_out,
-        final_activation="Sigmoid"
+        final_activation=final_activation,
     )
     return model
 

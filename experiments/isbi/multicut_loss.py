@@ -138,6 +138,11 @@ class MulticutAffinityLoss(nn.Module):
         self._compute_graph_structure()
         self.multicut_layer = MulticutModuleWithRandIndex(loss_min_scaling, loss_max_scaling, num_grad_samples)
 
+        # all torch_em classes should store init kwargs to easily recreate the init call
+        self.init_kwargs = {"patch_shape": patch_shape, "offsets": offsets,
+                            "loss_min_scaling": loss_min_scaling, "loss_max_scaling": loss_max_scaling,
+                            "num_grad_samples": num_grad_samples}
+
     # NOTE we could improve performance by sending self.uv_ids, and self.edge_mask to the device already
     # (but for this would need to pass the device to __init__)
     # compute the graph structure for the given patch_shape from the offsets
