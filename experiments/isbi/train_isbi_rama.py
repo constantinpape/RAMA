@@ -19,11 +19,10 @@ OFFSETS = [
 ]
 
 
-def get_model():
+def get_model(pretrained):
     n_out = len(OFFSETS)
 
-    # TODO not sure what exactly we should do for the activation
-    # as RAMA probably expects costs in range ]-inf,inf[ instead of [0,1]
+    # we don't use any activation, as RAMA expects costs in range ]-inf,inf[ instead of [0,1]
     # so we could either use no activation or a Sigmoid followed by rescaling into ]-inf,inf[
     # the latter might be beneficial because it ensures costs in a sensible range in the beginning of training
     # final_activation = "Sigmoid"
@@ -34,11 +33,16 @@ def get_model():
         out_channels=n_out,
         final_activation=final_activation,
     )
+    if pretrained:
+        assert os.path.exists(args.pretrained)
+        with torch.no_grad():
+            state = torch.load(args.pretrained, map_location="cpu")["model_state"]
+            model.load_state_dict(state)
     return model
 
 
-def train_rama(input_path, n_iterations, device):
-    model = get_model()
+def train_rama(input_path, n_iterations, pretrained, device):
+    model = get_model(pretrained)
 
     # shape of input patches (blocks) used for training
     patch_shape = [1, 512, 512]
@@ -92,19 +96,13 @@ def train_rama(input_path, n_iterations, device):
         device=device,
 
     )
-    if args.pretrained:
-        assert os.path.exists(args.pretrained)
-        with torch.no_grad():
-            state = torch.load(args.pretrained)["model_state"]
-            trainer.model.load_state_dict(state)
-            trainer.model.to(torch.device("cuda"))
+
     trainer.fit(n_iterations)
 
 
-# TODO implement finetuning of baseline model
 if __name__ == '__main__':
     parser = parser_helper()
     parser.add_argument("-v", "--version", required=True, type=int)
     parser.add_argument("-p", "--pretrained", default=None)
     args = parser.parse_args()
-    train_rama(args.input, args.n_iterations, args.device)
+    train_rama(args.input, args.n_iterations, args.pretrained, args.device)
