@@ -28,8 +28,7 @@ def train_baseline(input_path, n_iterations, device):
     model = get_model()
 
     # shape of input patches (blocks) used for training
-    # patch_shape = [1, 512, 512]
-    patch_shape = [1, 64, 64]
+    patch_shape = [1, 512, 512]
     batch_size = 1
 
     normalization = partial(torch_em.transform.raw.normalize, minval=0, maxval=255)

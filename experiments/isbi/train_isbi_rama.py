@@ -72,7 +72,7 @@ def train_rama(input_path, n_iterations, device):
     # with this scale we get (roughly) the 1/20 scale
     min_scale = 0.05
     max_scale = 0.5
-    loss = MulticutAffinityLoss(patch_shape, OFFSETS, min_scale, max_scale, num_grad_samples = 1)
+    loss = MulticutAffinityLoss(patch_shape, OFFSETS, min_scale, max_scale, num_grad_samples=1)
 
     name = "rama-model"
     trainer = torch_em.default_segmentation_trainer(
@@ -91,6 +91,7 @@ def train_rama(input_path, n_iterations, device):
     trainer.fit(n_iterations)
 
 
+# TODO implement finetuning of baseline model
 if __name__ == '__main__':
     parser = parser_helper()
     args = parser.parse_args()
