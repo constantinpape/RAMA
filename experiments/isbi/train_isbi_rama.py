@@ -38,8 +38,8 @@ def train_rama(input_path, n_iterations, device):
     model = get_model()
 
     # shape of input patches (blocks) used for training
-    # patch_shape = [1, 512, 512]
-    patch_shape = [1, 64, 64]
+    patch_shape = [1, 512, 512]
+    # patch_shape = [1, 64, 64]
     batch_size = 1
 
     normalization = partial(torch_em.transform.raw.normalize, minval=0, maxval=255)
@@ -70,9 +70,9 @@ def train_rama(input_path, n_iterations, device):
     )
 
     # with this scale we get (roughly) the 1/20 scale
-    min_scale = 100000.0
-    max_scale = 500000.0
-    loss = MulticutAffinityLoss(patch_shape, OFFSETS, min_scale, max_scale)
+    min_scale = 0.05
+    max_scale = 0.5
+    loss = MulticutAffinityLoss(patch_shape, OFFSETS, min_scale, max_scale, num_grad_samples = 1)
 
     name = "rama-model"
     trainer = torch_em.default_segmentation_trainer(
