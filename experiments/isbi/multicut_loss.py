@@ -4,7 +4,7 @@ import rama_py
 import rand_index_py
 import torch
 import torch.nn as nn
-from utils import save_gif
+# from utils import save_gif
 ###
 # this file should be moved to torch-em once everything fully works so it can be used in other experiments
 # partially copied from RAMA/src/multicut_layer.py, which is not importable with the rama_py installation
@@ -16,13 +16,15 @@ def get_edge_labels(node_labels, uv_ids):
     edge_labels = node_labels[uv_ids_long[:, 0]] != node_labels[uv_ids_long[:, 1]]
     return edge_labels.to(torch.float32)
 
+
 def hamming_distance(pred, gt):
     return torch.abs(pred - gt).sum()
 
+
 def compute_rand_index(node_labels_gt, incorrect_edge_labels_pred, incorrect_edge_indices):
     incorrect_edge_labels_gt = get_edge_labels(node_labels_gt, incorrect_edge_indices)
-    #norm = (2.0 * node_labels_gt.shape[0] * node_labels_gt.shape[0])
-    return torch.abs(incorrect_edge_labels_pred - incorrect_edge_labels_gt).sum() #/ norm
+    # norm = (2.0 * node_labels_gt.shape[0] * node_labels_gt.shape[0])
+    return torch.abs(incorrect_edge_labels_pred - incorrect_edge_labels_gt).sum()  # / norm
 
 
 def solve_multicut(uv_ids, edge_costs, solver_opts, contains_duplicate_edges=False):
@@ -64,12 +66,18 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
             if params['loss_on_input_adj']:
                 edge_labels_gt = get_edge_labels(node_labels_gt, uv_ids)
                 incorrect_uv_edge_locations = torch.nonzero(edge_labels_gt != uv_edge_labels).squeeze()
-                incorrect_edge_indices = torch.cat((incorrect_edge_indices, uv_ids[incorrect_uv_edge_locations, :]), 0)
-                incorrect_edge_labels = torch.cat((incorrect_edge_labels, uv_edge_labels[incorrect_uv_edge_locations]), 0)
+                incorrect_edge_indices = torch.cat(
+                    (incorrect_edge_indices, uv_ids[incorrect_uv_edge_locations, :]), 0
+                )
+                incorrect_edge_labels = torch.cat(
+                    (incorrect_edge_labels, uv_edge_labels[incorrect_uv_edge_locations]), 0
+                )
 
         ctx.params = params
         ctx.device = uv_costs.device
-        ctx.save_for_backward(uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices, node_labels_gt, node_labels)
+        ctx.save_for_backward(
+            uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices, node_labels_gt, node_labels
+        )
 
         ctx.mark_non_differentiable(node_labels)
         ctx.mark_non_differentiable(incorrect_edge_indices)
@@ -80,7 +88,9 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
         """
         Backward pass computation.
         """
-        uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices, node_labels_gt, node_labels_forward = ctx.saved_tensors
+        (uv_costs, uv_ids, uv_edge_labels,
+         incorrect_edge_labels, incorrect_edge_indices,
+         node_labels_gt, node_labels_forward) = ctx.saved_tensors
         assert(grad_incorrect_edge_labels.shape == incorrect_edge_labels.shape)
         # print(f"grad_incorrect_edge_labels: {grad_incorrect_edge_labels.min()}, {grad_incorrect_edge_labels.max()}")
         grad_avg = None
@@ -122,7 +132,7 @@ class MulticutModuleWithRandIndex(torch.nn.Module):
     """
     Torch module for Multicut Instances. Only implemented for one multicut instance for now (batch-size 1)
     """
-    def __init__(self, loss_min_scaling, loss_max_scaling, num_grad_samples, rand_index_subsampling_factor = 32, loss_on_input_adj = True):
+    def __init__(self, loss_min_scaling, loss_max_scaling, num_grad_samples, rand_index_subsampling_factor=32, loss_on_input_adj=True):
         """
         loss_min_scaling: Minimum value of pertubation.
             Actual value is sampled in [loss_min_scaling, loss_max_scaling].
@@ -131,7 +141,7 @@ class MulticutModuleWithRandIndex(torch.nn.Module):
         num_grad_samples: Number of times to average the gradients by sampling loss scalar.
         rand_index_subsampling_factor: Sample (rand_index_subsampling_factor^2) times less edges as in fully connected graph.
             Value of rand_index_subsampling_factor = 1 computes rand index on complete graph (slow)
-        loss_on_input_adj: Forcefully incorporate the input graph structure into the rand index calculation as well. 
+        loss_on_input_adj: Forcefully incorporate the input graph structure into the rand index calculation as well.
             Only applied when rand_index_subsampling_factor > 1.
         """
         super().__init__()

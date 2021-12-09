@@ -1,6 +1,8 @@
+import os
 from functools import partial
 
 import numpy as np
+import torch
 import torch_em
 from torch_em.model import UNet2d
 from torch_em.data.datasets import get_isbi_loader
@@ -54,7 +56,7 @@ def train_rama(input_path, n_iterations, device):
         batch_size=batch_size,
         raw_transform=normalization,
         num_workers=8*batch_size,
-        n_samples=500,
+        n_samples=50,
         shuffle=True,
     )
     roi_val = np.s_[28:, :, :]
@@ -66,7 +68,7 @@ def train_rama(input_path, n_iterations, device):
         batch_size=batch_size,
         raw_transform=normalization,
         num_workers=8*batch_size,
-        n_samples=25,
+        n_samples=2,
         shuffle=True,
     )
 
@@ -90,6 +92,12 @@ def train_rama(input_path, n_iterations, device):
         device=device,
 
     )
+    if args.pretrained:
+        assert os.path.exists(args.pretrained)
+        with torch.no_grad():
+            state = torch.load(args.pretrained)["model_state"]
+            trainer.model.load_state_dict(state)
+            trainer.model.to(torch.device("cuda"))
     trainer.fit(n_iterations)
 
 
@@ -97,5 +105,6 @@ def train_rama(input_path, n_iterations, device):
 if __name__ == '__main__':
     parser = parser_helper()
     parser.add_argument("-v", "--version", required=True, type=int)
+    parser.add_argument("-p", "--pretrained", default=None)
     args = parser.parse_args()
     train_rama(args.input, args.n_iterations, args.device)
