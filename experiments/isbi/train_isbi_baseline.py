@@ -5,6 +5,7 @@ import torch_em
 from torch_em.model import UNet2d
 from torch_em.data.datasets import get_isbi_loader
 from torch_em.util import parser_helper
+# from utils import MulticutRandMetric
 
 OFFSETS = [
     [-1, 0], [0, -1],
@@ -28,8 +29,7 @@ def train_baseline(input_path, n_iterations, device):
     model = get_model()
 
     # shape of input patches (blocks) used for training
-    # patch_shape = [1, 512, 512]
-    patch_shape = [1, 64, 64]
+    patch_shape = [1, 512, 512]
     batch_size = 1
 
     normalization = partial(torch_em.transform.raw.normalize, minval=0, maxval=255)
@@ -44,7 +44,7 @@ def train_baseline(input_path, n_iterations, device):
         raw_transform=normalization,
         num_workers=8*batch_size,
         offsets=OFFSETS,
-        n_samples=500,
+        n_samples=50,
         shuffle=True,
     )
     roi_val = np.s_[28:, :, :]
@@ -57,7 +57,7 @@ def train_baseline(input_path, n_iterations, device):
         raw_transform=normalization,
         num_workers=8*batch_size,
         offsets=OFFSETS,
-        n_samples=25,
+        n_samples=2,
         shuffle=True,
     )
 
@@ -66,6 +66,13 @@ def train_baseline(input_path, n_iterations, device):
         transform=torch_em.loss.ApplyAndRemoveMask()
     )
 
+    metric = loss
+    # FIXME this doesn't work properly for affinity targets
+    # metric = torch_em.loss.LossWrapper(
+    #     MulticutRandMetric(OFFSETS),
+    #     transform=torch_em.loss.ApplyAndRemoveMask()
+    # )
+
     name = "baseline-model"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
@@ -73,7 +80,7 @@ def train_baseline(input_path, n_iterations, device):
         train_loader=train_loader,
         val_loader=val_loader,
         loss=loss,
-        metric=loss,
+        metric=metric,
         learning_rate=1e-4,
         mixed_precision=False,
         log_image_interval=50,

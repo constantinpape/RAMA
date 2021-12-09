@@ -1,7 +1,45 @@
-import numpy as np 
-import torch 
+import numpy as np
+import rama_py
+import torch
+import elf.segmentation as elseg
+from elf.evaluation import rand_index
 
-def save_gif(image_tensor, path, vmin = None, vmax = None, cmap = None):
+
+def segment_rama(pred, offsets):
+    shape = pred.shape[1:]
+    g = elseg.features.compute_grid_graph(shape)
+    edges, costs = elseg.features.compute_grid_graph_affinity_features(g, pred, offsets)
+    opts = rama_py.multicut_solver_options()
+    opts.verbose = False
+    seg = rama_py.rama_cuda(
+        edges[:, 0], edges[:, 1], costs, opts, False
+    )[0]
+    seg = np.array(seg, dtype="uint32").reshape(shape)
+    return seg
+
+
+class MulticutRandMetric(torch.nn.Module):
+    def __init__(self, offsets):
+        super().__init__()
+        self.offsets = offsets
+        self.init_kwargs = {"offsets": offsets}
+
+    def forward(self, prediction, target):
+        assert prediction.shape[0] == target.shape[0] == 1, "Only support batchsize 1"
+        pred = prediction.detach().cpu().numpy().squeeze()
+        assert pred.shape[0] == len(self.offsets)
+        trgt = target.detach().cpu().numpy().squeeze()
+        # TODO not sure if this works properly
+        # if we have an affinity target we reconstruct the GT segmentation by applying RAMA to it
+        if trgt.shape == pred.shape:
+            trgt = segment_rama(pred, self.offsets)
+        seg = segment_rama(pred, self.offsets)
+        assert seg.shape == trgt.shape, f"{seg.shape}, {trgt.shape}"
+        score = rand_index(seg, trgt)[0]
+        return torch.tensor([score])
+
+
+def save_gif(image_tensor, path, vmin=None, vmax=None, cmap=None):
     from PIL import Image
     if torch.is_tensor(image_tensor):
         if len(image_tensor.shape) == 2:
@@ -27,11 +65,12 @@ def save_gif(image_tensor, path, vmin = None, vmax = None, cmap = None):
 
         im = Image.fromarray(im.astype(np.uint8))
         processed.append(im)
-    
+
     if len(processed) > 1:
-        processed[0].save(path + '.gif', save_all=True, append_images=processed[1:], duration=2000, loop=0, disposal = 1)
+        processed[0].save(path + '.gif', save_all=True, append_images=processed[1:], duration=2000, loop=0, disposal=1)
     else:
         processed[0].save(path + '.png')
+
 
 # Generate random colormap
 def rand_cmap(nlabels, type='soft', first_color_black=True, last_color_black=False):
@@ -45,10 +84,9 @@ def rand_cmap(nlabels, type='soft', first_color_black=True, last_color_black=Fal
     """
     from matplotlib.colors import LinearSegmentedColormap
     import colorsys
-    import numpy as np
 
     if type not in ('bright', 'soft'):
-        print ('Please choose "bright" or "soft" for type')
+        print('Please choose "bright" or "soft" for type')
         return
 
     # Generate color map for bright colors, based on hsv
@@ -87,13 +125,14 @@ def rand_cmap(nlabels, type='soft', first_color_black=True, last_color_black=Fal
 
     return random_colormap
 
-def apply_segmented_cmap(image_array, max_v = None):
+
+def apply_segmented_cmap(image_array, max_v=None):
     if torch.is_tensor(image_array):
         image_array = image_array.cpu().detach().numpy()
 
     if max_v is None:
         max_v = max(image_array.max(), 1)
-        
+
     cm = rand_cmap(max(int(max_v), 2))
     image_array = image_array / max_v
     image_array_colored = cm(image_array)
