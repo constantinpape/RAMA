@@ -3,6 +3,15 @@ import h5py
 import napari
 import torch
 from torch_em.util.util import get_trainer
+from utils import segment_rama
+
+
+OFFSETS = [
+    [-1, 0], [0, -1],
+    [-3, 0], [0, -3],
+    [-9, 0], [0, -9],
+    [-27, 0], [0, -27]
+]
 
 
 def _predict(raw, ckpt):
@@ -13,11 +22,6 @@ def _predict(raw, ckpt):
         input_ = torch.from_numpy(raw[None, None]).to(device)
         pred = model(input_)[0].cpu().numpy()
     return pred
-
-
-# TODO segment with rama
-def _segment(pred):
-    pass
 
 
 def main():
@@ -36,13 +40,15 @@ def main():
     print("Run prediction for baseline model")
     baseline = _predict(raw, "./checkpoints/baseline-model")
     if bool(args.segment):
-        baseline_seg = _segment(baseline)
+        print("Run segmentation for baseline model")
+        baseline_seg = segment_rama(baseline, OFFSETS)
 
     # predict with the rama model
     print("Run prediction for rama model version", args.version)
     rama = _predict(raw, f"./checkpoints/rama-model-v{args.version}")
     if bool(args.segment):
-        rama_seg = _segment(rama)
+        print("Run segmentation for rama model")
+        rama_seg = segment_rama(rama, OFFSETS)
 
     v = napari.Viewer()
     v.add_image(raw)

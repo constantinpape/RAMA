@@ -7,6 +7,7 @@ from torch_em.data.datasets import get_isbi_loader
 from torch_em.util import parser_helper
 
 from multicut_loss import MulticutAffinityLoss
+from utils import MulticutRandMetric
 
 OFFSETS = [
     [-1, 0], [0, -1],
@@ -73,15 +74,16 @@ def train_rama(input_path, n_iterations, device):
     min_scale = 0.05
     max_scale = 0.5
     loss = MulticutAffinityLoss(patch_shape, OFFSETS, min_scale, max_scale, num_grad_samples=1)
+    metric = MulticutRandMetric(OFFSETS)
 
-    name = "rama-model"
+    name = "rama-model-v{args.version}"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         loss=loss,
-        metric=loss,
+        metric=metric,
         learning_rate=1e-4,
         mixed_precision=False,
         log_image_interval=50,
@@ -94,5 +96,6 @@ def train_rama(input_path, n_iterations, device):
 # TODO implement finetuning of baseline model
 if __name__ == '__main__':
     parser = parser_helper()
+    parser.add_argument("-v", "--version", required=True, type=int)
     args = parser.parse_args()
     train_rama(args.input, args.n_iterations, args.device)
