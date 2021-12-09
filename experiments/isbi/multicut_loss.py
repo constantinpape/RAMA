@@ -4,7 +4,7 @@ import rama_py
 import rand_index_py
 import torch
 import torch.nn as nn
-
+from utils import save_gif
 ###
 # this file should be moved to torch-em once everything fully works so it can be used in other experiments
 # partially copied from RAMA/src/multicut_layer.py, which is not importable with the rama_py installation
@@ -16,11 +16,13 @@ def get_edge_labels(node_labels, uv_ids):
     edge_labels = node_labels[uv_ids_long[:, 0]] != node_labels[uv_ids_long[:, 1]]
     return edge_labels.to(torch.float32)
 
+def hamming_distance(pred, gt):
+    return torch.abs(pred - gt).sum()
 
 def compute_rand_index(node_labels_gt, incorrect_edge_labels_pred, incorrect_edge_indices):
     incorrect_edge_labels_gt = get_edge_labels(node_labels_gt, incorrect_edge_indices)
-    norm = (2.0 * node_labels_gt.shape[0] * node_labels_gt.shape[0])
-    return torch.abs(incorrect_edge_labels_pred - incorrect_edge_labels_gt).sum() / norm
+    #norm = (2.0 * node_labels_gt.shape[0] * node_labels_gt.shape[0])
+    return torch.abs(incorrect_edge_labels_pred - incorrect_edge_labels_gt).sum() #/ norm
 
 
 def solve_multicut(uv_ids, edge_costs, solver_opts, contains_duplicate_edges=False):
@@ -47,8 +49,11 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
             assert(node_labels.shape == node_labels_gt.shape)
             node_labels_cpu = node_labels.cpu().numpy()
             node_labels_gt_cpu = node_labels_gt.cpu().numpy()
-            incorrect_edge_i, incorrect_edge_j = rand_index_py.compute_incorrect_edge_indices(
-                node_labels_cpu, node_labels_gt_cpu
+            # node_labels_gt_2d = node_labels_gt.reshape((512, 512))
+            # save_gif(node_labels_gt_2d, 'node_labels_gt_2d', cmap='seg')
+
+            incorrect_edge_i, incorrect_edge_j = rand_index_py.compute_incorrect_edge_indices_sampled(
+                node_labels_cpu, node_labels_gt_cpu, params['rand_index_subsampling_factor']
             )
             # Compute incorrect edge labels and indices.
             incorrect_edge_indices = torch.stack((
@@ -56,9 +61,15 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
             ), 1).to(uv_costs.device)
             incorrect_edge_labels = get_edge_labels(node_labels, incorrect_edge_indices)
 
+            if params['loss_on_input_adj']:
+                edge_labels_gt = get_edge_labels(node_labels_gt, uv_ids)
+                incorrect_uv_edge_locations = torch.nonzero(edge_labels_gt != uv_edge_labels).squeeze()
+                incorrect_edge_indices = torch.cat((incorrect_edge_indices, uv_ids[incorrect_uv_edge_locations, :]), 0)
+                incorrect_edge_labels = torch.cat((incorrect_edge_labels, uv_edge_labels[incorrect_uv_edge_locations]), 0)
+
         ctx.params = params
         ctx.device = uv_costs.device
-        ctx.save_for_backward(uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices)
+        ctx.save_for_backward(uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices, node_labels_gt, node_labels)
 
         ctx.mark_non_differentiable(node_labels)
         ctx.mark_non_differentiable(incorrect_edge_indices)
@@ -69,12 +80,17 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
         """
         Backward pass computation.
         """
-        uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices = ctx.saved_tensors
+        uv_costs, uv_ids, uv_edge_labels, incorrect_edge_labels, incorrect_edge_indices, node_labels_gt, node_labels_forward = ctx.saved_tensors
         assert(grad_incorrect_edge_labels.shape == incorrect_edge_labels.shape)
+        # print(f"grad_incorrect_edge_labels: {grad_incorrect_edge_labels.min()}, {grad_incorrect_edge_labels.max()}")
         grad_avg = None
         assert(ctx.params["num_grad_samples"] > 0)
         # This can create duplicate edges so multicut solver must merge duplicates first.
         merged_edge_indices = torch.cat((uv_ids, incorrect_edge_indices), 0)
+        # edge_labels_forward = get_edge_labels(node_labels_forward, merged_edge_indices)
+        # edge_labels_gt = get_edge_labels(node_labels_gt, merged_edge_indices)
+        # print(f"Forward loss: {hamming_distance(edge_labels_forward, edge_labels_gt)}")
+
         for s in range(ctx.params["num_grad_samples"]):
             loss_scaling = np.random.uniform(low=ctx.params["min_pert"], high=ctx.params["max_pert"])
             incorrect_edge_costs = loss_scaling * grad_incorrect_edge_labels
@@ -82,8 +98,12 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
             node_labels_pert = solve_multicut(
                 merged_edge_indices, merged_pert_edge_costs, ctx.params["solver_opts"], True
             )
+            # Backward loss should be less than forward loss from above.
+            # print(f"Backward loss: {hamming_distance(get_edge_labels(node_labels_pert, merged_edge_indices), edge_labels_gt)}, lambda: {loss_scaling}")
+            # save_gif(node_labels_pert.reshape((512, 512)), 'node_labels_pert_2d_' + str(loss_scaling), cmap='seg')
+
             uv_edge_labels_pert = get_edge_labels(node_labels_pert, uv_ids)
-            current_grad = (uv_edge_labels_pert - uv_edge_labels) / loss_scaling
+            current_grad = (uv_edge_labels_pert - uv_edge_labels) / (1.0 + loss_scaling)
             if s == 0:
                 grad_avg = current_grad
             else:
@@ -91,8 +111,8 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
 
             # the incorrect edge costs should be ~ 1/20 of costs (controlled by loss_scaling)
             # uncomment to monitor these values
-            # print("costs:", uv_costs.min(), uv_costs.max())
-            # print("incorrect-costs:", incorrect_edge_costs.min(), incorrect_edge_costs.max())
+            # print(f"costs: {uv_costs.min()}, {uv_costs.max()}")
+            # print(f"incorrect-costs: {incorrect_edge_costs.min()}, {incorrect_edge_costs.max()}")
         grad_avg /= ctx.params["num_grad_samples"]
         assert(grad_avg.shape == uv_costs.shape)
         return None, grad_avg, None, None, None
@@ -102,21 +122,29 @@ class MulticutModuleWithRandIndex(torch.nn.Module):
     """
     Torch module for Multicut Instances. Only implemented for one multicut instance for now (batch-size 1)
     """
-    def __init__(self, loss_min_scaling, loss_max_scaling, num_grad_samples):
+    def __init__(self, loss_min_scaling, loss_max_scaling, num_grad_samples, rand_index_subsampling_factor = 32, loss_on_input_adj = True):
         """
         loss_min_scaling: Minimum value of pertubation.
             Actual value is sampled in [loss_min_scaling, loss_max_scaling].
         loss_max_scaling: Maximum value of pertubation.
             Actual value is sampled in [loss_min_scaling, loss_max_scaling].
         num_grad_samples: Number of times to average the gradients by sampling loss scalar.
+        rand_index_subsampling_factor: Sample (rand_index_subsampling_factor^2) times less edges as in fully connected graph.
+            Value of rand_index_subsampling_factor = 1 computes rand index on complete graph (slow)
+        loss_on_input_adj: Forcefully incorporate the input graph structure into the rand index calculation as well. 
+            Only applied when rand_index_subsampling_factor > 1.
         """
         super().__init__()
         solver_opts = rama_py.multicut_solver_options("PD")
         solver_opts.verbose = False
+        if (rand_index_subsampling_factor <= 1):
+            loss_on_input_adj = False
         self.params = {"solver_opts": solver_opts,
                        "min_pert": loss_min_scaling,
                        "max_pert": loss_max_scaling,
-                       "num_grad_samples": num_grad_samples}
+                       "num_grad_samples": num_grad_samples,
+                       "rand_index_subsampling_factor": rand_index_subsampling_factor,
+                       "loss_on_input_adj": loss_on_input_adj}
         self.solver = MultiCutSolverWithRandIndex()
 
     def forward(self, uv_ids, uv_costs, node_labels_gt=None):
