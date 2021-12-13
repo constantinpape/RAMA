@@ -46,7 +46,7 @@ def solve_multicut_gpu_pointers(uv_ids, edge_costs, solver_opts, contains_duplic
     node_labels = torch.ones(num_nodes, device = edge_costs.device).to(torch.int32)
     edge_i = uv_ids[:, 0].clone().contiguous().to(torch.int32)
     edge_j = uv_ids[:, 1].clone().contiguous().to(torch.int32)
-    costs_cont = edge_costs.clone().contiguous()
+    costs_cont = edge_costs.clone().contiguous().to(torch.float32)
     rama_py.rama_cuda_gpu_pointers(edge_i.data_ptr(), edge_j.data_ptr(), costs_cont.data_ptr(), node_labels.data_ptr(), num_nodes, edge_i.numel(), edge_costs.device.index, solver_opts, contains_duplicate_edges)
     return node_labels
 
