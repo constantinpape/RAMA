@@ -97,18 +97,23 @@ PYBIND11_MODULE(rama_py, m) {
             return a.get_string();
         });
 
-    m.def("rama_cuda", [](const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& edge_costs, const multicut_solver_options& opts, const bool contains_duplicate_edges = false) {
+    m.def("rama_cuda", [](const std::vector<int>& i, const std::vector<int>& j, const std::vector<float>& edge_costs, const multicut_solver_options& opts, const bool contains_duplicate_edges) {
             return rama_cuda(i, j, edge_costs, opts, contains_duplicate_edges);
-            });
+            }, "Compute multicut on a graph {(i,j,c)} where i, j are edge indices and c is edge cost. First item in output contains node labels and second argument the lower bound.", 
+            py::arg("i"), py::arg("j"), py::arg("edge_costs"), py::arg("opts"), py::arg("contains_duplicate_edges") = false);
 
     m.def("rama_cuda_gpu_pointers", [](const long i_ptr, const long j_ptr, const long edge_costs_ptr, const long node_labels_out_ptr, 
-                                    const int num_nodes, const int num_edges, const int gpuDeviceID, const multicut_solver_options& opts, const bool contains_duplicate_edges = false) {
+                                    const int num_nodes, const int num_edges, const int gpuDeviceID, const multicut_solver_options& opts, const bool contains_duplicate_edges) {
             const int* const i = reinterpret_cast<const int* const>(i_ptr);
             const int* const j = reinterpret_cast<const int* const>(j_ptr);
             const float* const edge_costs = reinterpret_cast<const float* const>(edge_costs_ptr);
             int* const node_labels = reinterpret_cast<int* const>(node_labels_out_ptr);
             return rama_cuda_gpu_pointers(i, j, edge_costs, node_labels, num_nodes, num_edges, gpuDeviceID, opts, contains_duplicate_edges);
-            });
+            }, 
+            "Compute multicut on a graph {(i,j,c)} where i_ptr, j_ptr are pointers to edge indices and c_ptr is pointer to edge costs. All input arrays should be contiguous in GPU memory."
+            "The resulting node labeling is written to node_labels_out_ptr, where it should be already pre-allocated to size num_nodes.", 
+            py::arg("i_ptr"), py::arg("j_ptr"), py::arg("edge_costs_ptr"), py::arg("node_labels_out_ptr"), py::arg("num_nodes"), py::arg("num_edges"),
+            py::arg("gpuDeviceID"), py::arg("opts"), py::arg("contains_duplicate_edges") = false);
 
     m.def("read_multicut_file", [](const std::string& filename) {
             return read_file(filename);

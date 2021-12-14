@@ -4,6 +4,7 @@ import rama_py
 import rand_index_py
 import torch
 import torch.nn as nn
+import time
 # from utils import save_gif
 ###
 # this file should be moved to torch-em once everything fully works so it can be used in other experiments
@@ -38,12 +39,26 @@ def solve_multicut(uv_ids, edge_costs, solver_opts, contains_duplicate_edges=Fal
     node_labels = torch.IntTensor(node_labels_cpu).to(edge_costs.device)
     return node_labels
 
+def solve_multicut_gpu_pointers(uv_ids, edge_costs, solver_opts, contains_duplicate_edges=False):
+    assert(uv_ids.shape[0] == edge_costs.shape[0])
+    assert(uv_ids.shape[1] == 2)
+    num_nodes = uv_ids.max() + 1 #TODO this can be precomputed once.
+    node_labels = torch.ones(num_nodes, device = edge_costs.device).to(torch.int32)
+    edge_i = uv_ids[:, 0].clone().contiguous().to(torch.int32)
+    edge_j = uv_ids[:, 1].clone().contiguous().to(torch.int32)
+    costs_cont = edge_costs.clone().contiguous().to(torch.float32)
+    rama_py.rama_cuda_gpu_pointers(
+        edge_i.data_ptr(), edge_j.data_ptr(), costs_cont.data_ptr(), 
+        node_labels.data_ptr(), num_nodes, edge_i.numel(), 
+        edge_costs.device.index, solver_opts, contains_duplicate_edges)
+    return node_labels
 
 class MultiCutSolverWithRandIndex(torch.autograd.Function):
     @staticmethod
     def forward(ctx, uv_ids, uv_costs, params, node_labels_gt=None):
         ctx.set_materialize_grads(False)
-        node_labels = solve_multicut(uv_ids, uv_costs, params["solver_opts"])
+        # node_labels = solve_multicut(uv_ids, uv_costs, params["solver_opts"]) needs to copy to GPU.
+        node_labels = solve_multicut_gpu_pointers(uv_ids, uv_costs, params["solver_opts"])
         uv_edge_labels = get_edge_labels(node_labels, uv_ids)
         if node_labels_gt is None:
             assert(~uv_costs.requires_grad)
@@ -105,11 +120,16 @@ class MultiCutSolverWithRandIndex(torch.autograd.Function):
             loss_scaling = np.random.uniform(low=ctx.params["min_pert"], high=ctx.params["max_pert"])
             incorrect_edge_costs = loss_scaling * grad_incorrect_edge_labels
             merged_pert_edge_costs = torch.cat((uv_costs, incorrect_edge_costs), 0)
-            node_labels_pert = solve_multicut(
+            # node_labels_pert = solve_multicut(
+            #     merged_edge_indices, merged_pert_edge_costs, ctx.params["solver_opts"], True
+            # )
+            node_labels_pert = solve_multicut_gpu_pointers(
                 merged_edge_indices, merged_pert_edge_costs, ctx.params["solver_opts"], True
             )
+
             # Backward loss should be less than forward loss from above.
             # print(f"Backward loss: {hamming_distance(get_edge_labels(node_labels_pert, merged_edge_indices), edge_labels_gt)}, lambda: {loss_scaling}")
+
             # save_gif(node_labels_pert.reshape((512, 512)), 'node_labels_pert_2d_' + str(loss_scaling), cmap='seg')
 
             uv_edge_labels_pert = get_edge_labels(node_labels_pert, uv_ids)

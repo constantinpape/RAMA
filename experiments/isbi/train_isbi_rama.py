@@ -38,6 +38,7 @@ def get_model(pretrained):
         with torch.no_grad():
             state = torch.load(args.pretrained, map_location="cpu")["model_state"]
             model.load_state_dict(state)
+            print(f"Loaded pretrained model from: {args.pretrained}")
     return model
 
 
