@@ -82,7 +82,7 @@ def train_rama(input_path, n_iterations, pretrained, device):
     loss = MulticutAffinityLoss(patch_shape, OFFSETS, min_scale, max_scale, num_grad_samples=1)
     metric = MulticutRandMetric(OFFSETS)
 
-    name = "rama-model-v{args.version}"
+    name = f"rama-model-v{args.version}"
     trainer = torch_em.default_segmentation_trainer(
         name=name,
         model=model,
