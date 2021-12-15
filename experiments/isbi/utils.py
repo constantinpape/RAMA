@@ -3,12 +3,15 @@ import rama_py
 import torch
 import elf.segmentation as elseg
 from elf.evaluation import rand_index
+from elf.segmentation.multicut import compute_edge_costs
 
 
-def segment_rama(pred, offsets):
+def segment_rama(pred, offsets, transform_to_costs=False):
     shape = pred.shape[1:]
     g = elseg.features.compute_grid_graph(shape)
     edges, costs = elseg.features.compute_grid_graph_affinity_features(g, pred, offsets)
+    if transform_to_costs:
+        costs = compute_edge_costs(costs)
     opts = rama_py.multicut_solver_options()
     opts.verbose = False
     seg = rama_py.rama_cuda(
@@ -19,10 +22,11 @@ def segment_rama(pred, offsets):
 
 
 class MulticutRandMetric(torch.nn.Module):
-    def __init__(self, offsets):
+    def __init__(self, offsets, return_seg=True):
         super().__init__()
         self.offsets = offsets
-        self.init_kwargs = {"offsets": offsets}
+        self.return_seg = return_seg
+        self.init_kwargs = {"offsets": offsets, "return_seg": return_seg}
 
     def forward(self, prediction, target):
         assert prediction.shape[0] == target.shape[0] == 1, "Only support batchsize 1"
@@ -35,7 +39,11 @@ class MulticutRandMetric(torch.nn.Module):
             trgt = segment_rama(pred, self.offsets)
         seg = segment_rama(pred, self.offsets)
         assert seg.shape == trgt.shape, f"{seg.shape}, {trgt.shape}"
+        # NOTE this returns the adapted rand error = 1.0 - adapted rand index already
+        # hence, smaller values are better and we can use it as a metric
         score = rand_index(seg, trgt)[0]
+        if self.return_seg:
+            return torch.tensor([score]), seg
         return torch.tensor([score])
 
 

@@ -14,14 +14,14 @@ OFFSETS = [
 ]
 
 
-def _segment(raw, ckpt):
+def _segment(raw, ckpt, transform_to_costs=False):
     device = torch.device("cpu")
     with torch.no_grad():
         model = get_trainer(ckpt, device=device).model
         model.eval()
         input_ = torch.from_numpy(raw[None, None]).to(device)
         pred = model(input_)[0].cpu().numpy()
-    seg = segment_rama(pred, OFFSETS)
+    seg = segment_rama(pred, OFFSETS, transform_to_costs)
     return seg
 
 
@@ -29,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input")
     parser.add_argument("-c", "--checkpoint")
+    parser.add_argument("--costs", default=0, type=int)
     args = parser.parse_args()
     ckpt = args.checkpoint
 
@@ -37,7 +38,7 @@ def main():
         raw = f["raw"][-1]
         gt = f["labels/gt_segmentation"][-1]
     raw = raw.astype("float32") / 255.0
-    seg = _segment(raw, ckpt)
+    seg = _segment(raw, ckpt, bool(args.costs))
     score = rand_index(seg, gt)[0]
     print("Eval score for", ckpt, score)
 

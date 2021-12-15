@@ -10,8 +10,8 @@ The training data will be downloaded automatically to the given path.
 
 ## Evaluation
 
-| Version  | Description | Score  |
-| -------- | ----------- | ------ |
-| baseline | -           | 0.9171 |
-| v1       | rama e2e    | 0.3412 |
-| v2       | rama e2e + pretrained | 0.0671 |
+| Version  | Description | RandError  |
+| -------- | ----------- | ---------- |
+| baseline | -           | 0.0691     |
+| v1       | e2e         | 0.3412     |
+| v2       | e2e + pretr | 0.0671     |

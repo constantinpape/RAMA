@@ -9,6 +9,7 @@ from torch_em.data.datasets import get_isbi_loader
 from torch_em.util import parser_helper
 
 from multicut_loss import MulticutAffinityLoss
+from rama_trainer import RamaTrainer
 from utils import MulticutRandMetric
 
 OFFSETS = [
@@ -95,7 +96,7 @@ def train_rama(input_path, n_iterations, pretrained, device):
         mixed_precision=False,
         log_image_interval=50,
         device=device,
-
+        trainer_class=RamaTrainer,
     )
 
     trainer.fit(n_iterations)
